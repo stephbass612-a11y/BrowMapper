@@ -12,43 +12,17 @@ struct BrowStencilApp: App {
     }
 }
 
+// MARK: - Main UI View
 struct ContentView: View {
     @StateObject private var permissionModel = CameraPermissionModel()
-
+    
     var body: some View {
         ZStack {
+            Color(white: 0.98).ignoresSafeArea()
+            
             switch permissionModel.status {
             case .authorized:
-                BrowMappingCameraView()
-                    .ignoresSafeArea()
-
-                VStack {
-                    HStack {
-                        Spacer()
-
-                        Text("Keep your face centered and look straight ahead")
-                            .font(.system(size: 14, weight: .semibold))
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 10)
-                            .background(.black.opacity(0.45), in: Capsule())
-                            .foregroundStyle(.white)
-                    }
-                    .padding(.top, 20)
-                    .padding(.horizontal, 16)
-
-                    Spacer()
-
-                    Text("Gold guides + soft mask = ideal brow overlay")
-                        .multilineTextAlignment(.center)
-                        .font(.system(size: 15, weight: .medium))
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 12)
-                        .background(.black.opacity(0.45), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                        .foregroundStyle(.white)
-                        .padding(.bottom, 24)
-                }
-                .allowsHitTesting(false)
-
+                mainAppContent
             case .notDetermined:
                 permissionView(
                     title: "Camera Access Needed",
@@ -56,7 +30,6 @@ struct ContentView: View {
                 ) {
                     permissionModel.requestAccess()
                 }
-
             case .denied, .restricted:
                 permissionView(
                     title: "Camera Access Off",
@@ -64,7 +37,6 @@ struct ContentView: View {
                 ) {
                     permissionModel.openSettings()
                 }
-
             @unknown default:
                 permissionView(
                     title: "Camera Unavailable",
@@ -72,132 +44,277 @@ struct ContentView: View {
                 ) { }
             }
         }
-        .background(.black)
         .task {
             if permissionModel.status == .notDetermined {
                 permissionModel.requestAccess()
             }
         }
     }
-
+    
+    // The exact UI layout matching the screenshot
+    private var mainAppContent: some View {
+        ZStack(alignment: .bottom) {
+            VStack(spacing: 0) {
+                // Top White Area with Navigation and Level
+                VStack(spacing: 16) {
+                    // Navigation Bar
+                    HStack {
+                        Image(systemName: "gearshape")
+                            .font(.system(size: 24))
+                            .foregroundColor(Color(white: 0.4))
+                        
+                        Spacer()
+                        
+                        Text("Brow Mapping")
+                            .font(.system(size: 20, weight: .regular))
+                            .foregroundColor(Color(white: 0.2))
+                        
+                        Spacer()
+                        
+                        Image(systemName: "questionmark")
+                            .font(.system(size: 24))
+                            .foregroundColor(Color(white: 0.4))
+                    }
+                    .padding(.horizontal, 20)
+                    
+                    // Level Indicator
+                    ZStack {
+                        Capsule()
+                            .fill(Color.gray.opacity(0.3))
+                            .frame(width: 200, height: 8)
+                        Circle()
+                            .fill(Color.green.opacity(0.7))
+                            .frame(width: 6, height: 6)
+                    }
+                    .padding(.bottom, 12)
+                }
+                .padding(.top, 10) // safe area padding
+                .background(Color.white)
+                .zIndex(2)
+                
+                // Live Camera View Layer
+                BrowMappingCameraView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .clipped()
+                
+                // Bottom White Area
+                Color(white: 0.98)
+                    .frame(height: 190)
+            }
+            .ignoresSafeArea(.keyboard)
+            
+            // Floating Overlays (Overlaps camera and bottom sheet)
+            VStack(spacing: 16) {
+                // Info Card
+                HStack(spacing: 16) {
+                    // Avatar Placeholder
+                    ZStack {
+                        Circle()
+                            .fill(Color(white: 0.9))
+                            .frame(width: 48, height: 48)
+                        Image(systemName: "person.fill")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(height: 24)
+                            .foregroundColor(.gray)
+                            .offset(y: 4)
+                            .clipShape(Circle())
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Sarah Jenkins")
+                            .font(.system(size: 17, weight: .medium))
+                            .foregroundColor(Color(white: 0.2))
+                        Text("Last visit: 2 weeks ago • Soft arch")
+                            .font(.system(size: 14, weight: .regular))
+                            .foregroundColor(Color.gray)
+                    }
+                    Spacer()
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
+                .background(Color.white)
+                .cornerRadius(16)
+                .shadow(color: Color.black.opacity(0.06), radius: 10, x: 0, y: 4)
+                
+                // Controls Card
+                HStack {
+                    VStack(spacing: 10) {
+                        Image(systemName: "mappin.and.ellipse")
+                            .font(.system(size: 22))
+                            .foregroundColor(Color(white: 0.3))
+                        Text("Align Points")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(Color.gray)
+                    }
+                    .frame(maxWidth: .infinity)
+                    
+                    Divider().frame(height: 40)
+                    
+                    VStack(spacing: 10) {
+                        ZStack {
+                            Capsule().fill(Color(white: 0.4))
+                                .frame(width: 40, height: 16)
+                            HStack(spacing: 6) {
+                                Circle().fill(Color.green).frame(width: 4, height: 4)
+                                Circle().fill(Color.purple.opacity(0.8)).frame(width: 4, height: 4)
+                            }
+                        }
+                        .frame(height: 22) // match height to icons
+                        
+                        Text("Level")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(Color.gray)
+                    }
+                    .frame(maxWidth: .infinity)
+                    
+                    Divider().frame(height: 40)
+                    
+                    VStack(spacing: 10) {
+                        Image(systemName: "camera.fill")
+                            .font(.system(size: 22))
+                            .foregroundColor(Color(white: 0.3))
+                        Text("Take Photo")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(Color.gray)
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 16)
+                .background(Color.white)
+                .cornerRadius(16)
+                .shadow(color: Color.black.opacity(0.06), radius: 10, x: 0, y: 4)
+                
+                // Save Mapping Button
+                Button(action: { }) {
+                    Text("SAVE MAPPING")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 20)
+                        .background(Color(white: 0.2))
+                        .cornerRadius(30)
+                }
+                .padding(.top, 4)
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 24)
+        }
+    }
+    
     @ViewBuilder
     private func permissionView(title: String, message: String, action: @escaping () -> Void) -> some View {
         VStack(spacing: 18) {
             Text(title)
                 .font(.system(size: 28, weight: .bold))
-                .foregroundStyle(.white)
-
+                .foregroundColor(.black)
+            
             Text(message)
                 .multilineTextAlignment(.center)
                 .font(.system(size: 17))
-                .foregroundStyle(.white.opacity(0.8))
+                .foregroundColor(.gray)
                 .frame(maxWidth: 320)
-
+            
             Button(action: action) {
                 Text(permissionModel.status == .notDetermined ? "Allow Camera" : "Open Settings")
                     .font(.system(size: 17, weight: .semibold))
                     .padding(.horizontal, 18)
                     .padding(.vertical, 12)
-                    .background(Color.white, in: Capsule())
-                    .foregroundStyle(.black)
+                    .background(Color.blue, in: Capsule())
+                    .foregroundColor(.white)
             }
         }
         .padding(24)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.black)
     }
 }
 
+// MARK: - Camera Permission Model
 final class CameraPermissionModel: ObservableObject {
     @Published var status = AVCaptureDevice.authorizationStatus(for: .video)
-
+    
     func requestAccess() {
         let currentStatus = AVCaptureDevice.authorizationStatus(for: .video)
         if currentStatus == .authorized {
-            DispatchQueue.main.async {
-                self.status = currentStatus
-            }
+            DispatchQueue.main.async { self.status = currentStatus }
             return
         }
-
         AVCaptureDevice.requestAccess(for: .video) { [weak self] _ in
             DispatchQueue.main.async {
                 self?.status = AVCaptureDevice.authorizationStatus(for: .video)
             }
         }
     }
-
+    
     func openSettings() {
         guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
         UIApplication.shared.open(url)
     }
 }
 
+// MARK: - SwiftUI Camera Representative
 struct BrowMappingCameraView: UIViewRepresentable {
     func makeUIView(context: Context) -> BrowMappingPreviewView {
         let view = BrowMappingPreviewView()
         view.start()
         return view
     }
-
+    
     func updateUIView(_ uiView: BrowMappingPreviewView, context: Context) {}
-
+    
     static func dismantleUIView(_ uiView: BrowMappingPreviewView, coordinator: ()) {
         uiView.stop()
     }
 }
 
+// MARK: - Vision Camera View
 final class BrowMappingPreviewView: UIView, AVCaptureVideoDataOutputSampleBufferDelegate {
     private let session = AVCaptureSession()
     private let previewLayer = AVCaptureVideoPreviewLayer()
-    private let stencilFillLayer = CAShapeLayer()
-    private let stencilStrokeLayer = CAShapeLayer()
-    private let guideLayer = CAShapeLayer()
-    private let horizontalGuideLayer = CAShapeLayer()
-
+    
+    private let redGuidesLayer = CAShapeLayer()
+    private let purpleGuidesLayer = CAShapeLayer()
+    
     private let sessionQueue = DispatchQueue(label: "brow.session.queue")
     private let videoQueue = DispatchQueue(label: "brow.video.queue")
-
-    private let overlaySmoother = BrowOverlaySmoother(alpha: 0.18)
-
+    
+    private let overlaySmoother = BrowOverlaySmoother(alpha: 0.25)
+    
     private var isConfigured = false
     private var isRunning = false
     private var isProcessingFrame = false
     private var missedFrames = 0
     private var currentViewSize: CGSize = .zero
-
+    
     override init(frame: CGRect) {
         super.init(frame: frame)
         configureLayers()
     }
-
+    
     required init?(coder: NSCoder) {
         super.init(coder: coder)
         configureLayers()
     }
-
+    
     override func layoutSubviews() {
         super.layoutSubviews()
         previewLayer.frame = bounds
-        stencilFillLayer.frame = bounds
-        stencilStrokeLayer.frame = bounds
-        guideLayer.frame = bounds
-        horizontalGuideLayer.frame = bounds
+        redGuidesLayer.frame = bounds
+        purpleGuidesLayer.frame = bounds
         currentViewSize = bounds.size
     }
-
+    
     func start() {
         sessionQueue.async { [weak self] in
             guard let self else { return }
-            if !self.isConfigured {
-                self.configureSession()
-            }
+            if !self.isConfigured { self.configureSession() }
             guard self.isConfigured, !self.isRunning else { return }
             self.session.startRunning()
             self.isRunning = true
         }
     }
-
+    
     func stop() {
         sessionQueue.async { [weak self] in
             guard let self, self.isRunning else { return }
@@ -205,121 +322,80 @@ final class BrowMappingPreviewView: UIView, AVCaptureVideoDataOutputSampleBuffer
             self.isRunning = false
         }
     }
-
+    
     private func configureLayers() {
         backgroundColor = .black
-
+        
         previewLayer.session = session
         previewLayer.videoGravity = .resizeAspectFill
         layer.addSublayer(previewLayer)
-
-        guideLayer.strokeColor = UIColor.systemYellow.withAlphaComponent(0.95).cgColor
-        guideLayer.fillColor = UIColor.clear.cgColor
-        guideLayer.lineWidth = 2
-        guideLayer.lineCap = .round
-        guideLayer.lineJoin = .round
-        guideLayer.shadowOpacity = 0.3
-        guideLayer.shadowRadius = 2
-        guideLayer.shadowOffset = .zero
-        layer.addSublayer(guideLayer)
-
-        horizontalGuideLayer.strokeColor = UIColor.systemYellow.withAlphaComponent(0.28).cgColor
-        horizontalGuideLayer.fillColor = UIColor.clear.cgColor
-        horizontalGuideLayer.lineWidth = 2
-        horizontalGuideLayer.lineCap = .round
-        horizontalGuideLayer.lineJoin = .round
-        layer.addSublayer(horizontalGuideLayer)
-
-        stencilFillLayer.fillColor = UIColor.systemYellow.withAlphaComponent(0.16).cgColor
-        stencilFillLayer.strokeColor = UIColor.clear.cgColor
-        stencilFillLayer.lineJoin = .round
-        layer.addSublayer(stencilFillLayer)
-
-        stencilStrokeLayer.strokeColor = UIColor.white.withAlphaComponent(0.88).cgColor
-        stencilStrokeLayer.fillColor = UIColor.clear.cgColor
-        stencilStrokeLayer.lineWidth = 2
-        stencilStrokeLayer.lineJoin = .round
-        stencilStrokeLayer.lineCap = .round
-        stencilStrokeLayer.shadowOpacity = 0.3
-        stencilStrokeLayer.shadowRadius = 2
-        stencilStrokeLayer.shadowOffset = .zero
-        layer.addSublayer(stencilStrokeLayer)
+        
+        // Setup Yellow Dashed Lines (Previously Red)
+        redGuidesLayer.strokeColor = UIColor.white.withAlphaComponent(0.5).cgColor
+        redGuidesLayer.fillColor = UIColor.clear.cgColor
+        redGuidesLayer.lineWidth = 1
+        redGuidesLayer.lineDashPattern = [6, 4]
+        redGuidesLayer.lineCap = .butt
+        redGuidesLayer.lineJoin = .miter
+        layer.addSublayer(redGuidesLayer)
+        
+        // Setup White Dashed Lines (Previously Purple)
+        purpleGuidesLayer.strokeColor = UIColor.white.withAlphaComponent(0.9).cgColor
+        purpleGuidesLayer.fillColor = UIColor.clear.cgColor
+        purpleGuidesLayer.lineWidth = 1
+        //purpleGuidesLayer.lineDashPattern = [6, 4]
+        purpleGuidesLayer.lineCap = .butt
+        purpleGuidesLayer.lineJoin = .miter
+        layer.addSublayer(purpleGuidesLayer)
     }
-
+    
     private func configureSession() {
         session.beginConfiguration()
         session.sessionPreset = .high
-
-        defer {
-            session.commitConfiguration()
-        }
-
+        defer { session.commitConfiguration() }
+        
         guard
             let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front),
             let input = try? AVCaptureDeviceInput(device: camera),
             session.canAddInput(input)
-        else {
-            return
-        }
-
+        else { return }
         session.addInput(input)
-
+        
         let output = AVCaptureVideoDataOutput()
         output.alwaysDiscardsLateVideoFrames = true
-        output.videoSettings = [
-            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
-        ]
+        output.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA]
         output.setSampleBufferDelegate(self, queue: videoQueue)
-
+        
         guard session.canAddOutput(output) else { return }
         session.addOutput(output)
-
+        
         if let previewConnection = previewLayer.connection {
-            if previewConnection.isVideoOrientationSupported {
-                previewConnection.videoOrientation = .portrait
-            }
+            if previewConnection.isVideoOrientationSupported { previewConnection.videoOrientation = .portrait }
             if previewConnection.isVideoMirroringSupported {
                 previewConnection.automaticallyAdjustsVideoMirroring = false
                 previewConnection.isVideoMirrored = true
             }
         }
-
-        if let videoConnection = output.connection(with: .video) {
-            if videoConnection.isVideoOrientationSupported {
-                videoConnection.videoOrientation = .portrait
-            }
+        
+        if let videoConnection = output.connection(with: .video), videoConnection.isVideoOrientationSupported {
+            videoConnection.videoOrientation = .portrait
         }
-
+        
         isConfigured = true
     }
-
-    func captureOutput(
-        _ output: AVCaptureOutput,
-        didOutput sampleBuffer: CMSampleBuffer,
-        from connection: AVCaptureConnection
-    ) {
-        guard !isProcessingFrame else { return }
-        guard currentViewSize.width > 0, currentViewSize.height > 0 else { return }
-
+    
+    func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        guard !isProcessingFrame, currentViewSize.width > 0, currentViewSize.height > 0 else { return }
+        
         isProcessingFrame = true
         defer { isProcessingFrame = false }
-
+        
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
-
         let request = VNDetectFaceLandmarksRequest()
-
-        let handler = VNImageRequestHandler(
-            cvPixelBuffer: pixelBuffer,
-            orientation: .up,
-            options: [:]
-        )
-
-        do {
-            try handler.perform([request])
-        } catch {
-            return
-        }
-
+        let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: .up, options: [:])
+        
+        do { try handler.perform([request]) } catch { return }
+        
         guard
             let face = request.results?.max(by: { $0.boundingBox.area < $1.boundingBox.area }),
             let landmarks = face.landmarks
@@ -327,675 +403,220 @@ final class BrowMappingPreviewView: UIView, AVCaptureVideoDataOutputSampleBuffer
             handleMissedFace()
             return
         }
-
-        let imageSize = CGSize(
-            width: CVPixelBufferGetWidth(pixelBuffer),
-            height: CVPixelBufferGetHeight(pixelBuffer)
-        )
-
-        guard
-            let geometry = BrowGeometryBuilder.makeGeometry(
-                face: face,
-                landmarks: landmarks,
-                imageSize: imageSize,
-                viewSize: currentViewSize
-            )
-        else {
+        
+        let imageSize = CGSize(width: CVPixelBufferGetWidth(pixelBuffer), height: CVPixelBufferGetHeight(pixelBuffer))
+        
+        guard let geometry = BrowGeometryBuilder.makeGeometry(
+            face: face,
+            landmarks: landmarks,
+            imageSize: imageSize,
+            viewSize: currentViewSize
+        ) else {
             handleMissedFace()
             return
         }
-
+        
         missedFrames = 0
         let smoothed = overlaySmoother.smoothed(with: geometry)
+        
         DispatchQueue.main.async { [weak self] in
             self?.draw(smoothed)
         }
     }
-
+    
     private func handleMissedFace() {
         missedFrames += 1
         if missedFrames < 4 { return }
-
         overlaySmoother.reset()
         DispatchQueue.main.async { [weak self] in
-            self?.guideLayer.path = nil
-            self?.horizontalGuideLayer.path = nil
-            self?.stencilFillLayer.path = nil
-            self?.stencilStrokeLayer.path = nil
+            self?.redGuidesLayer.path = nil
+            self?.purpleGuidesLayer.path = nil
         }
     }
-
+    
     private func draw(_ geometry: BrowOverlayGeometry) {
-        let guidePath = UIBezierPath()
-        geometry.guideLines.forEach { line in
-            guard line.count == 2 else { return }
-            guidePath.move(to: line[0])
-            guidePath.addLine(to: line[1])
+        let redPath = CGMutablePath()
+        for line in geometry.redLines {
+            guard line.count == 2 else { continue }
+            redPath.move(to: line[0])
+            redPath.addLine(to: line[1])
         }
-
-        let horizontalPath = UIBezierPath()
-        if geometry.topHorizontalGuideLine.count == 2 {
-            horizontalPath.move(to: geometry.topHorizontalGuideLine[0])
-            horizontalPath.addLine(to: geometry.topHorizontalGuideLine[1])
+        redGuidesLayer.path = redPath
+        
+        let purplePath = CGMutablePath()
+        for line in geometry.purpleLines {
+            guard line.count == 2 else { continue }
+            purplePath.move(to: line[0])
+            purplePath.addLine(to: line[1])
         }
-        if geometry.bottomHorizontalGuideLine.count == 2 {
-            horizontalPath.move(to: geometry.bottomHorizontalGuideLine[0])
-            horizontalPath.addLine(to: geometry.bottomHorizontalGuideLine[1])
-        }
-
-        let fillPath = UIBezierPath()
-        fillPath.append(UIBezierPath(closedPolygon: geometry.leftStencil))
-        fillPath.append(UIBezierPath(closedPolygon: geometry.rightStencil))
-
-        let strokePath = UIBezierPath()
-        strokePath.append(UIBezierPath(closedPolygon: geometry.leftStencil))
-        strokePath.append(UIBezierPath(closedPolygon: geometry.rightStencil))
-
-        guideLayer.path = guidePath.cgPath
-        horizontalGuideLayer.path = horizontalPath.cgPath
-        stencilFillLayer.path = fillPath.cgPath
-        stencilStrokeLayer.path = strokePath.cgPath
+        purpleGuidesLayer.path = purplePath
     }
 }
 
+// MARK: - Math and Geometry Construction
 private struct BrowGeometryBuilder {
-    static func makeGeometry(
-        face: VNFaceObservation,
-        landmarks: VNFaceLandmarks2D,
-        imageSize: CGSize,
-        viewSize: CGSize
-    ) -> BrowOverlayGeometry? {
+    static func makeGeometry(face: VNFaceObservation, landmarks: VNFaceLandmarks2D, imageSize: CGSize, viewSize: CGSize) -> BrowOverlayGeometry? {
         guard
-            let leftBrowRegion = landmarks.leftEyebrow,
-            let rightBrowRegion = landmarks.rightEyebrow,
-            let leftEyeRegion = landmarks.leftEye,
-            let rightEyeRegion = landmarks.rightEye,
-            let noseRegion = landmarks.nose
-        else {
-            return nil
-        }
-
-        let leftBrow = leftBrowRegion.imagePoints(in: face, imageSize: imageSize).sortedByX()
-        let rightBrow = rightBrowRegion.imagePoints(in: face, imageSize: imageSize).sortedByX()
-        let leftEye = leftEyeRegion.imagePoints(in: face, imageSize: imageSize)
-        let rightEye = rightEyeRegion.imagePoints(in: face, imageSize: imageSize)
-        let nose = noseRegion.imagePoints(in: face, imageSize: imageSize)
-
-        guard leftBrow.count >= 3, rightBrow.count >= 3, leftEye.count >= 4, rightEye.count >= 4, nose.count >= 3 else {
-            return nil
-        }
-
-        let faceRect = face.boundingBox.imageRect(in: imageSize)
-        let faceCenterX = faceRect.midX
-        let lowerNose = nose.filteredLowerHalf()
+            let leftBrow = landmarks.leftEyebrow?.imagePoints(in: face, imageSize: imageSize),
+            let rightBrow = landmarks.rightEyebrow?.imagePoints(in: face, imageSize: imageSize),
+            let leftEye = landmarks.leftEye?.imagePoints(in: face, imageSize: imageSize),
+            let rightEye = landmarks.rightEye?.imagePoints(in: face, imageSize: imageSize),
+            let nose = landmarks.nose?.imagePoints(in: face, imageSize: imageSize)
+        else { return nil }
+        
+        // Mapped to View space natively
+        let mappedLeftBrow = leftBrow.map { $0.aspectFillMapped(from: imageSize, into: viewSize, mirroredHorizontally: true) }
+        let mappedRightBrow = rightBrow.map { $0.aspectFillMapped(from: imageSize, into: viewSize, mirroredHorizontally: true) }
+        let mappedLeftEye = leftEye.map { $0.aspectFillMapped(from: imageSize, into: viewSize, mirroredHorizontally: true) }
+        let mappedRightEye = rightEye.map { $0.aspectFillMapped(from: imageSize, into: viewSize, mirroredHorizontally: true) }
+        let mappedNose = nose.map { $0.aspectFillMapped(from: imageSize, into: viewSize, mirroredHorizontally: true) }
+        
+        let mappedLeftPupil = landmarks.leftPupil?.imagePoints(in: face, imageSize: imageSize).first?.aspectFillMapped(from: imageSize, into: viewSize, mirroredHorizontally: true)
+        let mappedRightPupil = landmarks.rightPupil?.imagePoints(in: face, imageSize: imageSize).first?.aspectFillMapped(from: imageSize, into: viewSize, mirroredHorizontally: true)
+        
+        // 1. Identify screen-left and screen-right nostrils
+        let lowerNose = mappedNose.filter { $0.y >= (mappedNose.map(\.y).reduce(0, +) / CGFloat(mappedNose.count)) }
         guard
-            let innerLeftNostril = lowerNose.min(by: { $0.x < $1.x }),
-            let innerRightNostril = lowerNose.max(by: { $0.x < $1.x })
-        else {
-            return nil
-        }
+            let screenLeftNostril = lowerNose.min(by: { $0.x < $1.x }),
+            let screenRightNostril = lowerNose.max(by: { $0.x < $1.x })
+        else { return nil }
+        
+        // Vision's "left" is the user's physical left, which is on the RIGHT side of the mirrored screen.
+        let physLeftNostril = screenRightNostril
+        let physRightNostril = screenLeftNostril
+        
+        let centerX = mappedNose.map(\.x).reduce(0, +) / CGFloat(max(mappedNose.count, 1))
+        let noseTipY = mappedNose.max(by: { $0.y < $1.y })?.y ?? screenLeftNostril.y
+        
+        let leftPupilPt = mappedLeftPupil ?? mappedLeftEye.center()
+        let rightPupilPt = mappedRightPupil ?? mappedRightEye.center()
+        
+        // Outer eye corners (Physical Left is Screen Right, so its outer corner is max X)
+        let leftOuterEyePt = mappedLeftEye.max(by: { $0.x < $1.x }) ?? .zero
+        // Outer eye corners (Physical Right is Screen Left, so its outer corner is min X)
+        let rightOuterEyePt = mappedRightEye.min(by: { $0.x < $1.x }) ?? .zero
+        
+        let leftBrowStart = mappedLeftBrow.max(by: { $0.x < $1.x }) ?? .zero
+        let rightBrowStart = mappedRightBrow.min(by: { $0.x < $1.x }) ?? .zero
+        
+        let topY = (leftBrowStart.y + rightBrowStart.y) * 0.5 - 10
+        let bottomY = (leftBrowStart.y + rightBrowStart.y) * 0.5 + 10
+        
+        let extL = screenLeftNostril.x - 70
+        let extR = screenRightNostril.x + 70
+        
+        // Yellow Lines (Verticals and Horizontals)
+        let redLines = [
+            [CGPoint(x: centerX, y: 0), CGPoint(x: centerX, y: noseTipY)], // Center Vertical
+            [CGPoint(x: screenLeftNostril.x, y: 0), screenLeftNostril], // Left Inner Vertical
+            [CGPoint(x: screenRightNostril.x, y: 0), screenRightNostril], // Right Inner Vertical
+            [CGPoint(x: extL, y: topY), CGPoint(x: extR, y: topY)], // Top Horizontal
+            [CGPoint(x: extL, y: bottomY), CGPoint(x: extR, y: bottomY)] // Bottom Horizontal
+        ]
+        
+        let length: CGFloat = 450
+        
+        // Map physical sides to physical sides to prevent crossing
+        let lArchDir = (leftPupilPt - physLeftNostril).normalized
+        let lTailDir = (leftOuterEyePt - physLeftNostril).normalized
+        let rArchDir = (rightPupilPt - physRightNostril).normalized
+        let rTailDir = (rightOuterEyePt - physRightNostril).normalized
+        
+        // White Lines (Diagonals)
+        let purpleLines = [
+            [physLeftNostril, physLeftNostril + lArchDir * length], // Left Arch
+            [physLeftNostril, physLeftNostril + lTailDir * length], // Left Tail
+            [physRightNostril, physRightNostril + rArchDir * length], // Right Arch
+            [physRightNostril, physRightNostril + rTailDir * length]  // Right Tail
+        ]
+        
+        return BrowOverlayGeometry(redLines: redLines, purpleLines: purpleLines)
+    }
+}
 
-        let leftEyeInfo = EyeInfo(points: leftEye, pupil: landmarks.leftPupil?.imagePoints(in: face, imageSize: imageSize).first, faceCenterX: faceCenterX)
-        let rightEyeInfo = EyeInfo(points: rightEye, pupil: landmarks.rightPupil?.imagePoints(in: face, imageSize: imageSize).first, faceCenterX: faceCenterX)
-
-        guard
-            let leftShape = mappedShape(
-                brow: leftBrow,
-                eye: leftEyeInfo,
-                nostrilPair: (innerLeftNostril, innerRightNostril),
-                faceCenterX: faceCenterX,
-                faceRect: faceRect,
-                imageSize: imageSize,
-                viewSize: viewSize
-            ),
-            let rightShape = mappedShape(
-                brow: rightBrow,
-                eye: rightEyeInfo,
-                nostrilPair: (innerLeftNostril, innerRightNostril),
-                faceCenterX: faceCenterX,
-                faceRect: faceRect,
-                imageSize: imageSize,
-                viewSize: viewSize
-            )
-        else {
-            return nil
-        }
-
-        let topGuide = topHorizontalGuide(
-            leftStartTop: leftShape.startGuideTop,
-            rightStartTop: rightShape.startGuideTop,
-            leftTailPoint: leftShape.tailPoint,
-            rightTailPoint: rightShape.tailPoint
-        )
-        let bottomGuide = bottomHorizontalGuide(
-            leftBottomY: leftShape.bottomGuideY,
-            rightBottomY: rightShape.bottomGuideY,
-            leftTailPoint: leftShape.tailPoint,
-            rightTailPoint: rightShape.tailPoint
-        )
-
+// MARK: - Geometry State
+private struct BrowOverlayGeometry {
+    let redLines: [[CGPoint]]
+    let purpleLines: [[CGPoint]]
+    
+    func blended(with previous: BrowOverlayGeometry, alpha: CGFloat) -> BrowOverlayGeometry {
         return BrowOverlayGeometry(
-            leftStencil: perfectBrowOverlay(
-                for: leftShape,
-                topGuideLine: topGuide,
-                bottomGuideLine: bottomGuide
-            ),
-            rightStencil: perfectBrowOverlay(
-                for: rightShape,
-                topGuideLine: topGuide,
-                bottomGuideLine: bottomGuide
-            ),
-            leftCenterline: leftShape.centerline,
-            rightCenterline: rightShape.centerline,
-            guideLines: leftShape.guides + rightShape.guides,
-            topHorizontalGuideLine: topGuide,
-            bottomHorizontalGuideLine: bottomGuide
+            redLines: blendLines(current: redLines, previous: previous.redLines, alpha: alpha),
+            purpleLines: blendLines(current: purpleLines, previous: previous.purpleLines, alpha: alpha)
         )
     }
-
-    private static func mappedShape(
-        brow: [CGPoint],
-        eye: EyeInfo,
-        nostrilPair: (CGPoint, CGPoint),
-        faceCenterX: CGFloat,
-        faceRect: CGRect,
-        imageSize: CGSize,
-        viewSize: CGSize
-    ) -> BrowShape? {
-        let browCenterX = brow.map(\.x).reduce(0, +) / CGFloat(Swift.max(brow.count, 1))
-        let nostrilOuter = browCenterX < faceCenterX ? nostrilPair.0 : nostrilPair.1
-
-        let startIntersection = PolylineMath.verticalIntersection(x: nostrilOuter.x, with: brow) ?? brow.closestPoint(toX: nostrilOuter.x)
-
-        let irisOuter = eye.outerIrisEdge
-        let archIntersection = PolylineMath.rayIntersection(from: nostrilOuter, toward: irisOuter, with: brow) ?? brow.closestPoint(to: eye.outerUpperGuideTarget)
-        let tailIntersection = PolylineMath.rayIntersection(from: nostrilOuter, toward: eye.outerCorner, with: brow) ?? brow.farthestFrom(point: startIntersection)
-
-        let trimmed = brow.trimmedBetweenX(startIntersection.x, and: tailIntersection.x)
-        guard trimmed.count >= 2 else { return nil }
-
-        var centerline = PolylineMath.resample(points: trimmed, count: 26)
-        centerline = centerline.reanchored(start: startIntersection, arch: archIntersection, tail: tailIntersection)
-
-        let eyeGap = max(eye.topY - archIntersection.y, 8)
-        let faceWidth = faceRect.width
-        let baseThickness = max(min(eyeGap * 0.42, faceWidth * 0.035), 8)
-
-        let stencil = PolylineMath.makeStencil(
-            around: centerline,
-            baseThickness: baseThickness
-        )
-
-        let guideExtension = max(faceRect.width * 0.05, 20)
-
-        let startTop = CGPoint(x: startIntersection.x, y: startIntersection.y - guideExtension)
-        let archTop = archIntersection + (archIntersection - nostrilOuter).normalized * guideExtension
-        let tailTop = tailIntersection + (tailIntersection - nostrilOuter).normalized * guideExtension
-
-        let guidesInView = [
-            [nostrilOuter, startTop],
-            [nostrilOuter, archTop],
-            [nostrilOuter, tailTop]
-        ].map { line in
-            line.map { imagePoint in
-                imagePoint.aspectFillMapped(from: imageSize, into: viewSize, mirroredHorizontally: true)
+    
+    private func blendLines(current: [[CGPoint]], previous: [[CGPoint]], alpha: CGFloat) -> [[CGPoint]] {
+        guard current.count == previous.count else { return current }
+        return zip(current, previous).map { currLine, prevLine in
+            guard currLine.count == prevLine.count else { return currLine }
+            return zip(currLine, prevLine).map { cPt, pPt in
+                CGPoint(x: pPt.x + (cPt.x - pPt.x) * alpha, y: pPt.y + (cPt.y - pPt.y) * alpha)
             }
         }
-
-        let mappedStencil = stencil.map {
-            $0.aspectFillMapped(from: imageSize, into: viewSize, mirroredHorizontally: true)
-        }
-        let mappedBrowLine = centerline.map {
-            $0.aspectFillMapped(from: imageSize, into: viewSize, mirroredHorizontally: true)
-        }
-
-        return BrowShape(
-            stencil: mappedStencil,
-            centerline: mappedBrowLine,
-            guides: guidesInView,
-            startGuideTop: startTop.aspectFillMapped(from: imageSize, into: viewSize, mirroredHorizontally: true),
-            tailPoint: tailIntersection.aspectFillMapped(from: imageSize, into: viewSize, mirroredHorizontally: true),
-            bottomGuideY: (mappedBrowLine.map(\.y).max() ?? 0) - 6
-        )
-    }
-
-    private static func topHorizontalGuide(
-        leftStartTop: CGPoint,
-        rightStartTop: CGPoint,
-        leftTailPoint: CGPoint,
-        rightTailPoint: CGPoint
-    ) -> [CGPoint] {
-        let y = ((leftStartTop.y + rightStartTop.y) * 0.5) - 6
-        let leftPoint = CGPoint(x: Swift.min(leftTailPoint.x, rightTailPoint.x), y: y)
-        let rightPoint = CGPoint(x: Swift.max(leftTailPoint.x, rightTailPoint.x), y: y)
-
-        return [leftPoint, rightPoint]
-    }
-
-    private static func bottomHorizontalGuide(
-        leftBottomY: CGFloat,
-        rightBottomY: CGFloat,
-        leftTailPoint: CGPoint,
-        rightTailPoint: CGPoint
-    ) -> [CGPoint] {
-        let y = (leftBottomY + rightBottomY) * 0.5
-        let leftPoint = CGPoint(x: Swift.min(leftTailPoint.x, rightTailPoint.x), y: y)
-        let rightPoint = CGPoint(x: Swift.max(leftTailPoint.x, rightTailPoint.x), y: y)
-
-        return [leftPoint, rightPoint]
-    }
-
-    private static func perfectBrowOverlay(
-        for shape: BrowShape,
-        topGuideLine: [CGPoint],
-        bottomGuideLine: [CGPoint]
-    ) -> [CGPoint] {
-        guard
-            shape.guides.count >= 3,
-            let topY = horizontalY(for: topGuideLine),
-            let bottomY = horizontalY(for: bottomGuideLine)
-        else {
-            return shape.stencil
-        }
-
-        let headLine = shape.guides[0]
-        let archLine = shape.guides[1]
-        let tailLine = shape.guides[2]
-
-        let innerTopY = topY + (bottomY - topY) * 0.22
-        let archTopY = topY + (bottomY - topY) * 0.04
-        let innerBottomY = bottomY - (bottomY - topY) * 0.06
-        let archBottomY = bottomY - (bottomY - topY) * 0.12
-        let tailTipY = topY + (bottomY - topY) * 0.54
-
-        guard
-            let headTop = pointOnGuide(headLine, atY: innerTopY),
-            let archTop = pointOnGuide(archLine, atY: archTopY),
-            let tailTip = pointOnGuide(tailLine, atY: tailTipY),
-            let archBottom = pointOnGuide(archLine, atY: archBottomY),
-            let headBottom = pointOnGuide(headLine, atY: innerBottomY)
-        else {
-            return shape.stencil
-        }
-
-        return [headTop, archTop, tailTip, archBottom, headBottom]
-    }
-
-    private static func horizontalY(for line: [CGPoint]) -> CGFloat? {
-        guard line.count == 2 else { return nil }
-        return (line[0].y + line[1].y) * 0.5
-    }
-
-    private static func pointOnGuide(_ line: [CGPoint], atY y: CGFloat) -> CGPoint? {
-        guard line.count == 2 else { return nil }
-        let start = line[0]
-        let end = line[1]
-        let deltaY = end.y - start.y
-        guard abs(deltaY) > 0.0001 else { return CGPoint(x: start.x, y: y) }
-
-        let t = (y - start.y) / deltaY
-        return start + (end - start) * t
     }
 }
 
-private struct EyeInfo {
-    let points: [CGPoint]
-    let pupil: CGPoint?
-    let faceCenterX: CGFloat
-
-    var outerCorner: CGPoint {
-        if center.x < faceCenterX {
-            return points.min(by: { $0.x < $1.x }) ?? .zero
-        } else {
-            return points.max(by: { $0.x < $1.x }) ?? .zero
-        }
-    }
-
-    var innerCorner: CGPoint {
-        if center.x < faceCenterX {
-            return points.max(by: { $0.x < $1.x }) ?? .zero
-        } else {
-            return points.min(by: { $0.x < $1.x }) ?? .zero
-        }
-    }
-
-    var topY: CGFloat {
-        points.map(\.y).min() ?? 0
-    }
-
-    var center: CGPoint {
-        pupil ?? CGPoint(
-            x: points.map(\.x).reduce(0, +) / CGFloat(max(points.count, 1)),
-            y: points.map(\.y).reduce(0, +) / CGFloat(max(points.count, 1))
-        )
-    }
-
-    var width: CGFloat {
-        (points.map(\.x).max() ?? 0) - (points.map(\.x).min() ?? 0)
-    }
-
-    var outerIrisEdge: CGPoint {
-        let direction = (outerCorner - center).normalized
-        let irisRadius = max(width * 0.16, 3)
-        return center + direction * irisRadius
-    }
-
-    var outerUpperGuideTarget: CGPoint {
-        CGPoint(x: outerCorner.x, y: topY)
-    }
-}
-
-private struct BrowShape {
-    let stencil: [CGPoint]
-    let centerline: [CGPoint]
-    let guides: [[CGPoint]]
-    let startGuideTop: CGPoint
-    let tailPoint: CGPoint
-    let bottomGuideY: CGFloat
-}
-
-private struct BrowOverlayGeometry {
-    let leftStencil: [CGPoint]
-    let rightStencil: [CGPoint]
-    let leftCenterline: [CGPoint]
-    let rightCenterline: [CGPoint]
-    let guideLines: [[CGPoint]]
-    let topHorizontalGuideLine: [CGPoint]
-    let bottomHorizontalGuideLine: [CGPoint]
-
-    func blended(with previous: BrowOverlayGeometry, alpha: CGFloat) -> BrowOverlayGeometry {
-        let horizontalAlpha = alpha * 0.45
-        return BrowOverlayGeometry(
-            leftStencil: blend(points: leftStencil, with: previous.leftStencil, alpha: alpha),
-            rightStencil: blend(points: rightStencil, with: previous.rightStencil, alpha: alpha),
-            leftCenterline: blend(points: leftCenterline, with: previous.leftCenterline, alpha: alpha),
-            rightCenterline: blend(points: rightCenterline, with: previous.rightCenterline, alpha: alpha),
-            guideLines: zip(guideLines, previous.guideLines).map { current, prior in
-                blend(points: current, with: prior, alpha: alpha)
-            },
-            topHorizontalGuideLine: blend(points: topHorizontalGuideLine, with: previous.topHorizontalGuideLine, alpha: horizontalAlpha),
-            bottomHorizontalGuideLine: blend(points: bottomHorizontalGuideLine, with: previous.bottomHorizontalGuideLine, alpha: horizontalAlpha)
-        )
-    }
-
-    private func blend(points: [CGPoint], with previous: [CGPoint], alpha: CGFloat) -> [CGPoint] {
-        guard points.count == previous.count else { return points }
-        return zip(points, previous).map { current, prior in
-            CGPoint(
-                x: prior.x + (current.x - prior.x) * alpha,
-                y: prior.y + (current.y - prior.y) * alpha
-            )
-        }
-    }
-}
-
+// MARK: - Point Smoothing
 private final class BrowOverlaySmoother {
     private let alpha: CGFloat
     private var previous: BrowOverlayGeometry?
-
-    init(alpha: CGFloat) {
-        self.alpha = alpha
-    }
-
+    
+    init(alpha: CGFloat) { self.alpha = alpha }
+    
     func smoothed(with current: BrowOverlayGeometry) -> BrowOverlayGeometry {
-        guard let previous else {
-            self.previous = current
+        guard let prev = previous else {
+            previous = current
             return current
         }
-
-        let blended = current.blended(with: previous, alpha: alpha)
-        self.previous = blended
+        let blended = current.blended(with: prev, alpha: alpha)
+        previous = blended
         return blended
     }
-
-    func reset() {
-        previous = nil
-    }
+    
+    func reset() { previous = nil }
 }
 
-private enum PolylineMath {
-    static func verticalIntersection(x: CGFloat, with polyline: [CGPoint]) -> CGPoint? {
-        let intersections = zip(polyline, polyline.dropFirst()).compactMap { p1, p2 -> CGPoint? in
-            guard x >= min(p1.x, p2.x), x <= max(p1.x, p2.x), p1.x != p2.x else { return nil }
-            let t = (x - p1.x) / (p2.x - p1.x)
-            return p1 + (p2 - p1) * t
-        }
-
-        return intersections.sorted(by: { $0.y < $1.y }).first
-    }
-
-    static func rayIntersection(from origin: CGPoint, toward target: CGPoint, with polyline: [CGPoint]) -> CGPoint? {
-        let ray = target - origin
-        guard ray.length > 0 else { return nil }
-
-        let intersections = zip(polyline, polyline.dropFirst()).compactMap { p1, p2 -> (CGPoint, CGFloat)? in
-            let segment = p2 - p1
-            let denominator = cross(ray, segment)
-            guard abs(denominator) > 0.0001 else { return nil }
-
-            let offset = p1 - origin
-            let t = cross(offset, segment) / denominator
-            let u = cross(offset, ray) / denominator
-
-            guard t >= 0, (0...1).contains(u) else { return nil }
-            return (origin + ray * t, t)
-        }
-
-        return intersections.min(by: { $0.1 < $1.1 })?.0
-    }
-
-    static func resample(points: [CGPoint], count: Int) -> [CGPoint] {
-        guard points.count > 1, count > 1 else { return points }
-
-        var cumulative: [CGFloat] = [0]
-        for (p1, p2) in zip(points, points.dropFirst()) {
-            cumulative.append(cumulative.last! + (p2 - p1).length)
-        }
-
-        let totalLength = cumulative.last ?? 0
-        guard totalLength > 0 else { return Array(repeating: points[0], count: count) }
-
-        var result: [CGPoint] = []
-        var segmentIndex = 0
-
-        for step in 0..<count {
-            let distance = totalLength * CGFloat(step) / CGFloat(count - 1)
-
-            while segmentIndex < cumulative.count - 2, cumulative[segmentIndex + 1] < distance {
-                segmentIndex += 1
-            }
-
-            let start = points[segmentIndex]
-            let end = points[segmentIndex + 1]
-            let segmentStart = cumulative[segmentIndex]
-            let segmentEnd = cumulative[segmentIndex + 1]
-            let segmentLength = max(segmentEnd - segmentStart, 0.0001)
-            let t = (distance - segmentStart) / segmentLength
-            result.append(start + (end - start) * t)
-        }
-
-        return result
-    }
-
-    static func makeStencil(around centerline: [CGPoint], baseThickness: CGFloat) -> [CGPoint] {
-        guard centerline.count >= 2 else { return centerline }
-
-        var upper: [CGPoint] = []
-        var lower: [CGPoint] = []
-
-        for index in centerline.indices {
-            let point = centerline[index]
-            let previous = centerline[max(index - 1, 0)]
-            let next = centerline[min(index + 1, centerline.count - 1)]
-            let tangent = (next - previous).normalized
-
-            let candidateA = CGPoint(x: -tangent.y, y: tangent.x)
-            let candidateB = CGPoint(x: tangent.y, y: -tangent.x)
-            let upperNormal = candidateA.y < candidateB.y ? candidateA : candidateB
-            let lowerNormal = upperNormal * -1
-
-            let t = CGFloat(index) / CGFloat(centerline.count - 1)
-            let thickness = taperedThickness(base: baseThickness, t: t)
-
-            upper.append(point + upperNormal * (thickness * 0.56))
-            lower.append(point + lowerNormal * (thickness * 0.44))
-        }
-
-        return upper + lower.reversed()
-    }
-
-    private static func taperedThickness(base: CGFloat, t: CGFloat) -> CGFloat {
-        let inner = base * (1.0 - 0.12 * min(t / 0.45, 1))
-        let tailStart = CGFloat(0.68)
-        if t <= tailStart { return inner }
-
-        let tailT = (t - tailStart) / (1 - tailStart)
-        return inner + (base * 0.38 - inner) * tailT
-    }
-
-    private static func cross(_ lhs: CGPoint, _ rhs: CGPoint) -> CGFloat {
-        lhs.x * rhs.y - lhs.y * rhs.x
-    }
-}
-
+// MARK: - Helpers & Extensions
 private extension VNFaceLandmarkRegion2D {
     func imagePoints(in face: VNFaceObservation, imageSize: CGSize) -> [CGPoint] {
         normalizedPoints.map { point in
             let normalizedX = face.boundingBox.origin.x + CGFloat(point.x) * face.boundingBox.width
             let normalizedY = face.boundingBox.origin.y + CGFloat(point.y) * face.boundingBox.height
-            return CGPoint(
-                x: normalizedX * imageSize.width,
-                y: (1 - normalizedY) * imageSize.height
-            )
+            return CGPoint(x: normalizedX * imageSize.width, y: (1 - normalizedY) * imageSize.height)
         }
     }
 }
 
 private extension CGRect {
-    var area: CGFloat {
-        width * height
-    }
-}
-
-private extension CGRect {
-    func imageRect(in imageSize: CGSize) -> CGRect {
-        CGRect(
-            x: origin.x * imageSize.width,
-            y: (1 - origin.y - height) * imageSize.height,
-            width: width * imageSize.width,
-            height: height * imageSize.height
-        )
-    }
+    var area: CGFloat { width * height }
 }
 
 private extension Array where Element == CGPoint {
-    func sortedByX() -> [CGPoint] {
-        sorted(by: { $0.x < $1.x })
-    }
-
-    func filteredLowerHalf() -> [CGPoint] {
-        let medianY = map(\.y).reduce(0, +) / CGFloat(Swift.max(count, 1))
-        return filter { $0.y >= medianY }
-    }
-
-    func closestPoint(toX x: CGFloat) -> CGPoint {
-        self.min(by: { abs($0.x - x) < abs($1.x - x) }) ?? .zero
-    }
-
-    func closestPoint(to point: CGPoint) -> CGPoint {
-        self.min(by: { ($0 - point).length < ($1 - point).length }) ?? .zero
-    }
-
-    func farthestFrom(point: CGPoint) -> CGPoint {
-        self.max(by: { ($0 - point).length < ($1 - point).length }) ?? .zero
-    }
-
-    func trimmedBetweenX(_ x1: CGFloat, and x2: CGFloat) -> [CGPoint] {
-        let minX = Swift.min(x1, x2)
-        let maxX = Swift.max(x1, x2)
-
-        var result = filter { $0.x >= minX && $0.x <= maxX }
-        result.append(closestPoint(toX: minX))
-        result.append(closestPoint(toX: maxX))
-        return result.sortedByX()
-    }
-
-    func reanchored(start: CGPoint, arch: CGPoint, tail: CGPoint) -> [CGPoint] {
-        guard count > 2 else { return self }
-
-        let startIndex = 0
-        let tailIndex = count - 1
-        let archIndex = map(\.y).enumerated().min(by: { $0.element < $1.element })?.offset ?? count / 2
-
-        let startDelta = start - self[startIndex]
-        let archDelta = arch - self[archIndex]
-        let tailDelta = tail - self[tailIndex]
-
-        return enumerated().map { index, point in
-            let influence: CGPoint
-            if index <= archIndex {
-                let t = CGFloat(index - startIndex) / CGFloat(Swift.max(archIndex - startIndex, 1))
-                influence = startDelta * (1 - t) + archDelta * t
-            } else {
-                let t = CGFloat(index - archIndex) / CGFloat(Swift.max(tailIndex - archIndex, 1))
-                influence = archDelta * (1 - t) + tailDelta * t
-            }
-            return point + influence
-        }
+    func center() -> CGPoint {
+        guard !isEmpty else { return .zero }
+        let total = reduce(CGPoint.zero) { CGPoint(x: $0.x + $1.x, y: $0.y + $1.y) }
+        return CGPoint(x: total.x / CGFloat(count), y: total.y / CGFloat(count))
     }
 }
 
 private extension CGPoint {
-    static func + (lhs: CGPoint, rhs: CGPoint) -> CGPoint {
-        CGPoint(x: lhs.x + rhs.x, y: lhs.y + rhs.y)
-    }
-
-    static func - (lhs: CGPoint, rhs: CGPoint) -> CGPoint {
-        CGPoint(x: lhs.x - rhs.x, y: lhs.y - rhs.y)
-    }
-
-    static func * (lhs: CGPoint, rhs: CGFloat) -> CGPoint {
-        CGPoint(x: lhs.x * rhs, y: lhs.y * rhs)
-    }
-
-    var length: CGFloat {
-        sqrt(x * x + y * y)
-    }
-
+    static func + (lhs: CGPoint, rhs: CGPoint) -> CGPoint { CGPoint(x: lhs.x + rhs.x, y: lhs.y + rhs.y) }
+    static func - (lhs: CGPoint, rhs: CGPoint) -> CGPoint { CGPoint(x: lhs.x - rhs.x, y: lhs.y - rhs.y) }
+    static func * (lhs: CGPoint, rhs: CGFloat) -> CGPoint { CGPoint(x: lhs.x * rhs, y: lhs.y * rhs) }
+    var length: CGFloat { sqrt(x * x + y * y) }
     var normalized: CGPoint {
         let len = max(length, 0.0001)
         return CGPoint(x: x / len, y: y / len)
     }
-
+    
     func aspectFillMapped(from imageSize: CGSize, into viewSize: CGSize, mirroredHorizontally: Bool = false) -> CGPoint {
         let scale = max(viewSize.width / imageSize.width, viewSize.height / imageSize.height)
         let scaledSize = CGSize(width: imageSize.width * scale, height: imageSize.height * scale)
         let xOffset = (viewSize.width - scaledSize.width) * 0.5
         let yOffset = (viewSize.height - scaledSize.height) * 0.5
-
-        var point = CGPoint(
-            x: x * scale + xOffset,
-            y: y * scale + yOffset
-        )
-
-        if mirroredHorizontally {
-            point.x = viewSize.width - point.x
-        }
-
+        var point = CGPoint(x: x * scale + xOffset, y: y * scale + yOffset)
+        if mirroredHorizontally { point.x = viewSize.width - point.x }
         return point
-    }
-}
-
-private extension UIBezierPath {
-    convenience init(polyline: [CGPoint]) {
-        self.init()
-        guard let first = polyline.first else { return }
-        move(to: first)
-        polyline.dropFirst().forEach(addLine(to:))
-    }
-
-    convenience init(closedPolygon: [CGPoint]) {
-        self.init(polyline: closedPolygon)
-        close()
     }
 }
