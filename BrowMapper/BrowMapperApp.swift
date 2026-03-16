@@ -3,6 +3,7 @@ import Combine
 import AVFoundation
 import Vision
 import CoreMotion
+import CoreImage // Added to handle the raw camera frame conversion
 
 @main
 struct BrowStencilApp: App {
@@ -44,7 +45,7 @@ struct ContentView: View {
     @State private var triggerCapture: Bool = false
     @State private var capturedImage: UIImage? = nil
     
-    // NEW: State for the snackbar
+    // State for the snackbar
     @State private var showSavedSnackBar: Bool = false
     
     var body: some View {
@@ -75,7 +76,7 @@ struct ContentView: View {
                 ) { }
             }
             
-            // NEW: Snackbar UI
+            // Snackbar UI
             if showSavedSnackBar {
                 VStack {
                     Text("Saved to Camera Roll")
@@ -98,7 +99,7 @@ struct ContentView: View {
                 permissionModel.requestAccess()
             }
         }
-        // NEW: Intercept the captured image, save it, and show snackbar
+        // Intercept the captured image, save it, and show snackbar
         .onChange(of: capturedImage) { newValue in
             if let image = newValue {
                 // Save to photos directly
@@ -190,6 +191,7 @@ struct ContentView: View {
             // Floating Overlays (Overlaps camera and bottom sheet)
             VStack(spacing: 16) {
                 // Info Card
+                /*
                 HStack(spacing: 16) {
                     // Avatar Placeholder
                     ZStack {
@@ -220,7 +222,7 @@ struct ContentView: View {
                 .background(Color.white)
                 .cornerRadius(16)
                 .shadow(color: Color.black.opacity(0.06), radius: 10, x: 0, y: 4)
-                
+                */
                 // Controls Card
                 HStack {
                     VStack(spacing: 10) {
@@ -243,12 +245,10 @@ struct ContentView: View {
                     }) {
                         VStack(spacing: 10) {
                             ZStack {
-                                // We can also dim the icon when it's turned off!
                                 Capsule().fill(showLevelIndicator ? Color(white: 0.4) : Color.gray.opacity(0.3))
                                     .frame(width: 40, height: 16)
                                 HStack(spacing: 6) {
                                     Circle().fill(showLevelIndicator ? Color.green : Color.gray).frame(width: 4, height: 4)
-                                    //Circle().fill(showLevelIndicator ? Color.purple.opacity(0.8) : Color.gray).frame(width: 4, height: 4)
                                 }
                             }
                             .frame(height: 22)
@@ -363,8 +363,15 @@ struct BrowMappingCameraView: UIViewRepresentable {
     func updateUIView(_ uiView: BrowMappingPreviewView, context: Context) {
         if triggerCapture {
             DispatchQueue.main.async {
-                self.capturedImage = uiView.snapshot()
+                // Immediately reset the trigger to prevent looping
                 self.triggerCapture = false
+                
+                // Request the frame from the camera view asynchronously
+                uiView.takeSnapshot { image in
+                    DispatchQueue.main.async {
+                        self.capturedImage = image
+                    }
+                }
             }
         }
     }
@@ -392,6 +399,9 @@ final class BrowMappingPreviewView: UIView, AVCaptureVideoDataOutputSampleBuffer
     private var isProcessingFrame = false
     private var missedFrames = 0
     private var currentViewSize: CGSize = .zero
+    
+    // Store the callback so we can execute it when the next camera frame hits
+    private var snapshotCompletion: ((UIImage?) -> Void)?
     
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -421,11 +431,9 @@ final class BrowMappingPreviewView: UIView, AVCaptureVideoDataOutputSampleBuffer
         }
     }
     
-    func snapshot() -> UIImage? {
-        guard bounds.width > 0, bounds.height > 0 else { return nil }
-        let renderer = UIGraphicsImageRenderer(bounds: bounds)
-        return renderer.image { _ in
-            drawHierarchy(in: bounds, afterScreenUpdates: false)
+    func takeSnapshot(completion: @escaping (UIImage?) -> Void) {
+        videoQueue.async { [weak self] in
+            self?.snapshotCompletion = completion
         }
     }
     
@@ -457,7 +465,6 @@ final class BrowMappingPreviewView: UIView, AVCaptureVideoDataOutputSampleBuffer
         purpleGuidesLayer.strokeColor = UIColor.white.withAlphaComponent(0.9).cgColor
         purpleGuidesLayer.fillColor = UIColor.clear.cgColor
         purpleGuidesLayer.lineWidth = 1
-        //purpleGuidesLayer.lineDashPattern = [6, 4]
         purpleGuidesLayer.lineCap = .butt
         purpleGuidesLayer.lineJoin = .miter
         layer.addSublayer(purpleGuidesLayer)
@@ -505,16 +512,28 @@ final class BrowMappingPreviewView: UIView, AVCaptureVideoDataOutputSampleBuffer
         defer { isProcessingFrame = false }
         
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+        
+        // Check if there's a pending snapshot request
+        var pendingCompletion: ((UIImage?) -> Void)? = nil
+        if let completion = snapshotCompletion {
+            pendingCompletion = completion
+            snapshotCompletion = nil // Clear it immediately
+        }
+        
         let request = VNDetectFaceLandmarksRequest()
         let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: .up, options: [:])
         
-        do { try handler.perform([request]) } catch { return }
+        do { try handler.perform([request]) } catch {
+            processSnapshot(pendingCompletion, pixelBuffer: pixelBuffer)
+            return
+        }
         
         guard
             let face = request.results?.max(by: { $0.boundingBox.area < $1.boundingBox.area }),
             let landmarks = face.landmarks
         else {
             handleMissedFace()
+            processSnapshot(pendingCompletion, pixelBuffer: pixelBuffer)
             return
         }
         
@@ -527,14 +546,57 @@ final class BrowMappingPreviewView: UIView, AVCaptureVideoDataOutputSampleBuffer
             viewSize: currentViewSize
         ) else {
             handleMissedFace()
+            processSnapshot(pendingCompletion, pixelBuffer: pixelBuffer)
             return
         }
         
         missedFrames = 0
         let smoothed = overlaySmoother.smoothed(with: geometry)
         
+        // Update the visual paths on the main thread
         DispatchQueue.main.async { [weak self] in
             self?.draw(smoothed)
+        }
+        
+        // Fire the snapshot sequence if requested, using the exact buffer and current layer state
+        processSnapshot(pendingCompletion, pixelBuffer: pixelBuffer)
+    }
+    
+    private func processSnapshot(_ completion: ((UIImage?) -> Void)?, pixelBuffer: CVPixelBuffer) {
+        guard let completion = completion else { return }
+        
+        let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
+        let context = CIContext()
+        let imageSize = CGSize(width: CVPixelBufferGetWidth(pixelBuffer), height: CVPixelBufferGetHeight(pixelBuffer))
+        let viewSize = self.currentViewSize
+        
+        if let cgImage = context.createCGImage(ciImage, from: ciImage.extent) {
+            // Front camera is naturally unmirrored at this stage, so we flip it to match the screen
+            let baseImage = UIImage(cgImage: cgImage, scale: 1.0, orientation: .upMirrored)
+            
+            // Hop to the main thread to render the final composite safely
+            DispatchQueue.main.async {
+                let renderer = UIGraphicsImageRenderer(bounds: CGRect(origin: .zero, size: viewSize))
+                let finalImage = renderer.image { ctx in
+                    // 1. Calculate the aspect fill rect to match the preview layer scale perfectly
+                    let scale = max(viewSize.width / imageSize.width, viewSize.height / imageSize.height)
+                    let scaledSize = CGSize(width: imageSize.width * scale, height: imageSize.height * scale)
+                    let xOffset = (viewSize.width - scaledSize.width) * 0.5
+                    let yOffset = (viewSize.height - scaledSize.height) * 0.5
+                    let drawRect = CGRect(x: xOffset, y: yOffset, width: scaledSize.width, height: scaledSize.height)
+                    
+                    // 2. Draw the camera frame
+                    baseImage.draw(in: drawRect)
+                    
+                    // 3. Render the guide layers explicitly on top
+                    self.redGuidesLayer.render(in: ctx.cgContext)
+                    self.purpleGuidesLayer.render(in: ctx.cgContext)
+                }
+                
+                completion(finalImage)
+            }
+        } else {
+            DispatchQueue.main.async { completion(nil) }
         }
     }
     
