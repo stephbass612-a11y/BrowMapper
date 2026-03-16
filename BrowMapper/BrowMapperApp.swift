@@ -44,6 +44,9 @@ struct ContentView: View {
     @State private var triggerCapture: Bool = false
     @State private var capturedImage: UIImage? = nil
     
+    // NEW: State for the snackbar
+    @State private var showSavedSnackBar: Bool = false
+    
     var body: some View {
         ZStack {
             Color(white: 0.98).ignoresSafeArea()
@@ -71,15 +74,56 @@ struct ContentView: View {
                     message: "This device state is not supported by the demo."
                 ) { }
             }
+            
+            // NEW: Snackbar UI
+            if showSavedSnackBar {
+                VStack {
+                    Text("Saved to Camera Roll")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 12)
+                        .background(Color.black.opacity(0.8))
+                        .cornerRadius(20)
+                        .shadow(color: Color.black.opacity(0.15), radius: 5, x: 0, y: 3)
+                        .padding(.top, 50)
+                    Spacer()
+                }
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .zIndex(100)
+            }
         }
         .task {
             if permissionModel.status == .notDetermined {
                 permissionModel.requestAccess()
             }
         }
+        // NEW: Intercept the captured image, save it, and show snackbar
+        .onChange(of: capturedImage) { newValue in
+            if let image = newValue {
+                // Save to photos directly
+                UIImageWriteToSavedPhotosAlbum(image, nil, nil, nil)
+                
+                // Clear state
+                capturedImage = nil
+                
+                // Show snackbar
+                withAnimation(.spring()) {
+                    showSavedSnackBar = true
+                }
+                
+                // Hide snackbar after 2.5 seconds
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                    withAnimation(.spring()) {
+                        showSavedSnackBar = false
+                    }
+                }
+            }
+        }
     }
     
     // The exact UI layout matching the screenshot
+    @ViewBuilder
     private var mainAppContent: some View {
         ZStack(alignment: .bottom) {
             VStack(spacing: 0) {
@@ -253,57 +297,6 @@ struct ContentView: View {
             .padding(.horizontal, 20)
             .padding(.bottom, 24)
         }
-        // Photo Preview Overlay
-        if let image = capturedImage {
-            ZStack {
-                Color.black.opacity(0.9).ignoresSafeArea()
-                
-                VStack(spacing: 30) {
-                    Text("Review Mapping")
-                        .font(.system(size: 20, weight: .semibold))
-                        .foregroundColor(.white)
-                        .padding(.top, 20)
-                    
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFit()
-                        .cornerRadius(16)
-                        .padding(.horizontal, 20)
-                    
-                    HStack(spacing: 60) {
-                        // Discard Button
-                        Button(action: {
-                            withAnimation { capturedImage = nil }
-                        }) {
-                            VStack(spacing: 8) {
-                                Image(systemName: "trash.fill")
-                                    .font(.system(size: 24))
-                                Text("Discard")
-                                    .font(.system(size: 14, weight: .medium))
-                            }
-                            .foregroundColor(.red)
-                        }
-                        
-                        // Save Button
-                        Button(action: {
-                            UIImageWriteToSavedPhotosAlbum(image, nil, nil, nil)
-                            withAnimation { capturedImage = nil }
-                        }) {
-                            VStack(spacing: 8) {
-                                Image(systemName: "arrow.down.to.line.circle.fill")
-                                    .font(.system(size: 24))
-                                Text("Save to Photos")
-                                    .font(.system(size: 14, weight: .medium))
-                            }
-                            .foregroundColor(.green)
-                        }
-                    }
-                    .padding(.bottom, 40)
-                }
-            }
-            .zIndex(100) // Ensure it sits above everything else
-            .transition(.opacity.combined(with: .scale(scale: 0.95)))
-        }
     }
     
     @ViewBuilder
@@ -429,11 +422,12 @@ final class BrowMappingPreviewView: UIView, AVCaptureVideoDataOutputSampleBuffer
     }
     
     func snapshot() -> UIImage? {
-            let renderer = UIGraphicsImageRenderer(bounds: bounds)
-            return renderer.image { _ in
-                drawHierarchy(in: bounds, afterScreenUpdates: true)
-            }
+        guard bounds.width > 0, bounds.height > 0 else { return nil }
+        let renderer = UIGraphicsImageRenderer(bounds: bounds)
+        return renderer.image { _ in
+            drawHierarchy(in: bounds, afterScreenUpdates: false)
         }
+    }
     
     func stop() {
         sessionQueue.async { [weak self] in
