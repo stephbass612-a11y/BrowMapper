@@ -2,6 +2,7 @@ import SwiftUI
 import Combine
 import AVFoundation
 import Vision
+import CoreMotion
 
 @main
 struct BrowStencilApp: App {
@@ -12,9 +13,33 @@ struct BrowStencilApp: App {
     }
 }
 
+final class DeviceTiltManager: ObservableObject {
+    private let motionManager = CMMotionManager()
+    
+    // Publishes the left/right tilt in radians
+    @Published var roll: Double = 0.0
+
+    init() {
+        if motionManager.isDeviceMotionAvailable {
+            // Update 60 times a second for smooth animation
+            motionManager.deviceMotionUpdateInterval = 1.0 / 60.0
+            motionManager.startDeviceMotionUpdates(to: .main) { [weak self] data, error in
+                guard let data = data else { return }
+                // In portrait mode, 'roll' gives us the left-to-right tilt
+                self?.roll = data.attitude.roll
+            }
+        }
+    }
+    
+    deinit {
+        motionManager.stopDeviceMotionUpdates()
+    }
+}
+
 // MARK: - Main UI View
 struct ContentView: View {
     @StateObject private var permissionModel = CameraPermissionModel()
+    @StateObject private var tiltManager = DeviceTiltManager()
     
     var body: some View {
         ZStack {
@@ -65,7 +90,7 @@ struct ContentView: View {
                         
                         Spacer()
                         
-                        Text("Brow Mapping")
+                        Text("Brow Mapper")
                             .font(.system(size: 20, weight: .regular))
                             .foregroundColor(Color(white: 0.2))
                         
@@ -82,9 +107,25 @@ struct ContentView: View {
                         Capsule()
                             .fill(Color.gray.opacity(0.3))
                             .frame(width: 200, height: 8)
+                        
+                        // 1. Calculate the offset based on the tilt
+                        // A multiplier of 150 makes it responsive without being overly sensitive
+                        let rawOffset = CGFloat(tiltManager.roll * 150.0)
+                        
+                        // 2. Clamp the dot so it doesn't fly outside the capsule
+                        // (Capsule is 200px wide. Max travel from center is ~96px)
+                        let xOffset = min(max(rawOffset, -96), 96)
+                        
+                        // 3. Optional: Check if the device is perfectly level (within a small threshold)
+                        let isLevel = abs(tiltManager.roll) < 0.05
+                        
                         Circle()
-                            .fill(Color.green.opacity(0.7))
+                        // Change color to green when level, white when tilted
+                            .fill(isLevel ? Color.green.opacity(0.8) : Color.white)
                             .frame(width: 6, height: 6)
+                            .offset(x: xOffset)
+                        // Add a spring animation to smooth out micro-jitters from the user's hand
+                            .animation(.interactiveSpring(response: 0.2, dampingFraction: 0.8), value: xOffset)
                     }
                     .padding(.bottom, 12)
                 }
