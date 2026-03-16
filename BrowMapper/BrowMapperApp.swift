@@ -376,9 +376,13 @@ final class BrowMappingPreviewView: UIView, AVCaptureVideoDataOutputSampleBuffer
         }
 
         let horizontalPath = UIBezierPath()
-        if geometry.horizontalGuideLine.count == 2 {
-            horizontalPath.move(to: geometry.horizontalGuideLine[0])
-            horizontalPath.addLine(to: geometry.horizontalGuideLine[1])
+        if geometry.topHorizontalGuideLine.count == 2 {
+            horizontalPath.move(to: geometry.topHorizontalGuideLine[0])
+            horizontalPath.addLine(to: geometry.topHorizontalGuideLine[1])
+        }
+        if geometry.bottomHorizontalGuideLine.count == 2 {
+            horizontalPath.move(to: geometry.bottomHorizontalGuideLine[0])
+            horizontalPath.addLine(to: geometry.bottomHorizontalGuideLine[1])
         }
 
         guideLayer.path = guidePath.cgPath
@@ -457,9 +461,15 @@ private struct BrowGeometryBuilder {
             leftCenterline: leftShape.centerline,
             rightCenterline: rightShape.centerline,
             guideLines: leftShape.guides + rightShape.guides,
-            horizontalGuideLine: horizontalGuide(
+            topHorizontalGuideLine: topHorizontalGuide(
                 leftStartTop: leftShape.startGuideTop,
                 rightStartTop: rightShape.startGuideTop,
+                leftTailPoint: leftShape.tailPoint,
+                rightTailPoint: rightShape.tailPoint
+            ),
+            bottomHorizontalGuideLine: bottomHorizontalGuide(
+                leftBottomY: leftShape.bottomGuideY,
+                rightBottomY: rightShape.bottomGuideY,
                 leftTailPoint: leftShape.tailPoint,
                 rightTailPoint: rightShape.tailPoint
             )
@@ -499,7 +509,7 @@ private struct BrowGeometryBuilder {
             baseThickness: baseThickness
         )
 
-        let guideExtension = max(faceRect.width * 0.03, 12)
+        let guideExtension = max(faceRect.width * 0.05, 20)
 
         let startTop = CGPoint(x: startIntersection.x, y: startIntersection.y - guideExtension)
         let archTop = archIntersection + (archIntersection - nostrilOuter).normalized * guideExtension
@@ -515,22 +525,43 @@ private struct BrowGeometryBuilder {
             }
         }
 
+        let mappedStencil = stencil.map {
+            $0.aspectFillMapped(from: imageSize, into: viewSize, mirroredHorizontally: true)
+        }
+        let mappedBrowLine = centerline.map {
+            $0.aspectFillMapped(from: imageSize, into: viewSize, mirroredHorizontally: true)
+        }
+
         return BrowShape(
-            stencil: stencil.map { $0.aspectFillMapped(from: imageSize, into: viewSize, mirroredHorizontally: true) },
-            centerline: centerline.map { $0.aspectFillMapped(from: imageSize, into: viewSize, mirroredHorizontally: true) },
+            stencil: mappedStencil,
+            centerline: mappedBrowLine,
             guides: guidesInView,
             startGuideTop: startTop.aspectFillMapped(from: imageSize, into: viewSize, mirroredHorizontally: true),
-            tailPoint: tailIntersection.aspectFillMapped(from: imageSize, into: viewSize, mirroredHorizontally: true)
+            tailPoint: tailIntersection.aspectFillMapped(from: imageSize, into: viewSize, mirroredHorizontally: true),
+            bottomGuideY: (mappedBrowLine.map(\.y).max() ?? 0) - 2
         )
     }
 
-    private static func horizontalGuide(
+    private static func topHorizontalGuide(
         leftStartTop: CGPoint,
         rightStartTop: CGPoint,
         leftTailPoint: CGPoint,
         rightTailPoint: CGPoint
     ) -> [CGPoint] {
         let y = ((leftStartTop.y + rightStartTop.y) * 0.5) - 6
+        let leftPoint = CGPoint(x: Swift.min(leftTailPoint.x, rightTailPoint.x), y: y)
+        let rightPoint = CGPoint(x: Swift.max(leftTailPoint.x, rightTailPoint.x), y: y)
+
+        return [leftPoint, rightPoint]
+    }
+
+    private static func bottomHorizontalGuide(
+        leftBottomY: CGFloat,
+        rightBottomY: CGFloat,
+        leftTailPoint: CGPoint,
+        rightTailPoint: CGPoint
+    ) -> [CGPoint] {
+        let y = (leftBottomY + rightBottomY) * 0.5
         let leftPoint = CGPoint(x: Swift.min(leftTailPoint.x, rightTailPoint.x), y: y)
         let rightPoint = CGPoint(x: Swift.max(leftTailPoint.x, rightTailPoint.x), y: y)
 
@@ -591,6 +622,7 @@ private struct BrowShape {
     let guides: [[CGPoint]]
     let startGuideTop: CGPoint
     let tailPoint: CGPoint
+    let bottomGuideY: CGFloat
 }
 
 private struct BrowOverlayGeometry {
@@ -599,7 +631,8 @@ private struct BrowOverlayGeometry {
     let leftCenterline: [CGPoint]
     let rightCenterline: [CGPoint]
     let guideLines: [[CGPoint]]
-    let horizontalGuideLine: [CGPoint]
+    let topHorizontalGuideLine: [CGPoint]
+    let bottomHorizontalGuideLine: [CGPoint]
 
     func blended(with previous: BrowOverlayGeometry, alpha: CGFloat) -> BrowOverlayGeometry {
         let horizontalAlpha = alpha * 0.45
@@ -611,7 +644,8 @@ private struct BrowOverlayGeometry {
             guideLines: zip(guideLines, previous.guideLines).map { current, prior in
                 blend(points: current, with: prior, alpha: alpha)
             },
-            horizontalGuideLine: blend(points: horizontalGuideLine, with: previous.horizontalGuideLine, alpha: horizontalAlpha)
+            topHorizontalGuideLine: blend(points: topHorizontalGuideLine, with: previous.topHorizontalGuideLine, alpha: horizontalAlpha),
+            bottomHorizontalGuideLine: blend(points: bottomHorizontalGuideLine, with: previous.bottomHorizontalGuideLine, alpha: horizontalAlpha)
         )
     }
 
