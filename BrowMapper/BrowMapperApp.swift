@@ -18,7 +18,7 @@ final class DeviceTiltManager: ObservableObject {
     
     // Publishes the left/right tilt in radians
     @Published var roll: Double = 0.0
-
+    
     init() {
         if motionManager.isDeviceMotionAvailable {
             // Update 60 times a second for smooth animation
@@ -40,6 +40,9 @@ final class DeviceTiltManager: ObservableObject {
 struct ContentView: View {
     @StateObject private var permissionModel = CameraPermissionModel()
     @StateObject private var tiltManager = DeviceTiltManager()
+    @State private var showLevelIndicator: Bool = true
+    @State private var triggerCapture: Bool = false
+    @State private var capturedImage: UIImage? = nil
     
     var body: some View {
         ZStack {
@@ -101,40 +104,36 @@ struct ContentView: View {
                             .foregroundColor(Color(white: 0.4))
                     }
                     .padding(.horizontal, 20)
+                    .padding(.bottom, showLevelIndicator ? 0 : 16)
                     
                     // Level Indicator
-                    ZStack {
-                        Capsule()
-                            .fill(Color.gray.opacity(0.3))
-                            .frame(width: 200, height: 8)
-                        
-                        // 1. Calculate the offset based on the tilt
-                        // A multiplier of 150 makes it responsive without being overly sensitive
-                        let rawOffset = CGFloat(tiltManager.roll * 150.0)
-                        
-                        // 2. Clamp the dot so it doesn't fly outside the capsule
-                        // (Capsule is 200px wide. Max travel from center is ~96px)
-                        let xOffset = min(max(rawOffset, -96), 96)
-                        
-                        // 3. Optional: Check if the device is perfectly level (within a small threshold)
-                        let isLevel = abs(tiltManager.roll) < 0.05
-                        
-                        Circle()
-                        // Change color to green when level, white when tilted
-                            .fill(isLevel ? Color.green.opacity(0.8) : Color.white)
-                            .frame(width: 6, height: 6)
-                            .offset(x: xOffset)
-                        // Add a spring animation to smooth out micro-jitters from the user's hand
-                            .animation(.interactiveSpring(response: 0.2, dampingFraction: 0.8), value: xOffset)
+                    if showLevelIndicator {
+                        ZStack {
+                            Capsule()
+                                .fill(Color.gray.opacity(0.3))
+                                .frame(width: 200, height: 8)
+                            
+                            let rawOffset = CGFloat(tiltManager.roll * 150.0)
+                            let xOffset = min(max(rawOffset, -96), 96)
+                            let isLevel = abs(tiltManager.roll) < 0.05
+                            
+                            Circle()
+                                .fill(isLevel ? Color.green.opacity(0.8) : Color.white)
+                                .frame(width: 6, height: 6)
+                                .offset(x: xOffset)
+                                .animation(.interactiveSpring(response: 0.2, dampingFraction: 0.8), value: xOffset)
+                        }
+                        .padding(.bottom, 12)
+                        // This makes it slide up and fade out cleanly
+                        .transition(.opacity.combined(with: .move(edge: .top)))
                     }
-                    .padding(.bottom, 12)
                 }
                 .padding(.top, 10) // safe area padding
                 .background(Color.white)
                 .zIndex(2)
                 
                 // Live Camera View Layer
-                BrowMappingCameraView()
+                BrowMappingCameraView(triggerCapture: $triggerCapture, capturedImage: $capturedImage)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .clipped()
                 
@@ -192,34 +191,46 @@ struct ContentView: View {
                     
                     Divider().frame(height: 40)
                     
-                    VStack(spacing: 10) {
-                        ZStack {
-                            Capsule().fill(Color(white: 0.4))
-                                .frame(width: 40, height: 16)
-                            HStack(spacing: 6) {
-                                Circle().fill(Color.green).frame(width: 4, height: 4)
-                                Circle().fill(Color.purple.opacity(0.8)).frame(width: 4, height: 4)
-                            }
+                    // Level Button
+                    Button(action: {
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            showLevelIndicator.toggle()
                         }
-                        .frame(height: 22) // match height to icons
-                        
-                        Text("Level")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundColor(Color.gray)
+                    }) {
+                        VStack(spacing: 10) {
+                            ZStack {
+                                // We can also dim the icon when it's turned off!
+                                Capsule().fill(showLevelIndicator ? Color(white: 0.4) : Color.gray.opacity(0.3))
+                                    .frame(width: 40, height: 16)
+                                HStack(spacing: 6) {
+                                    Circle().fill(showLevelIndicator ? Color.green : Color.gray).frame(width: 4, height: 4)
+                                    //Circle().fill(showLevelIndicator ? Color.purple.opacity(0.8) : Color.gray).frame(width: 4, height: 4)
+                                }
+                            }
+                            .frame(height: 22)
+                            
+                            Text("Level")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(showLevelIndicator ? Color(white: 0.3) : Color.gray)
+                        }
+                        .frame(maxWidth: .infinity)
                     }
-                    .frame(maxWidth: .infinity)
                     
                     Divider().frame(height: 40)
                     
-                    VStack(spacing: 10) {
-                        Image(systemName: "camera.fill")
-                            .font(.system(size: 22))
-                            .foregroundColor(Color(white: 0.3))
-                        Text("Take Photo")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundColor(Color.gray)
+                    Button(action: {
+                        triggerCapture = true
+                    }) {
+                        VStack(spacing: 10) {
+                            Image(systemName: "camera.fill")
+                                .font(.system(size: 22))
+                                .foregroundColor(Color(white: 0.3))
+                            Text("Take Photo")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(Color.gray)
+                        }
+                        .frame(maxWidth: .infinity)
                     }
-                    .frame(maxWidth: .infinity)
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 16)
@@ -241,6 +252,57 @@ struct ContentView: View {
             }
             .padding(.horizontal, 20)
             .padding(.bottom, 24)
+        }
+        // Photo Preview Overlay
+        if let image = capturedImage {
+            ZStack {
+                Color.black.opacity(0.9).ignoresSafeArea()
+                
+                VStack(spacing: 30) {
+                    Text("Review Mapping")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundColor(.white)
+                        .padding(.top, 20)
+                    
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFit()
+                        .cornerRadius(16)
+                        .padding(.horizontal, 20)
+                    
+                    HStack(spacing: 60) {
+                        // Discard Button
+                        Button(action: {
+                            withAnimation { capturedImage = nil }
+                        }) {
+                            VStack(spacing: 8) {
+                                Image(systemName: "trash.fill")
+                                    .font(.system(size: 24))
+                                Text("Discard")
+                                    .font(.system(size: 14, weight: .medium))
+                            }
+                            .foregroundColor(.red)
+                        }
+                        
+                        // Save Button
+                        Button(action: {
+                            UIImageWriteToSavedPhotosAlbum(image, nil, nil, nil)
+                            withAnimation { capturedImage = nil }
+                        }) {
+                            VStack(spacing: 8) {
+                                Image(systemName: "arrow.down.to.line.circle.fill")
+                                    .font(.system(size: 24))
+                                Text("Save to Photos")
+                                    .font(.system(size: 14, weight: .medium))
+                            }
+                            .foregroundColor(.green)
+                        }
+                    }
+                    .padding(.bottom, 40)
+                }
+            }
+            .zIndex(100) // Ensure it sits above everything else
+            .transition(.opacity.combined(with: .scale(scale: 0.95)))
         }
     }
     
@@ -296,14 +358,24 @@ final class CameraPermissionModel: ObservableObject {
 
 // MARK: - SwiftUI Camera Representative
 struct BrowMappingCameraView: UIViewRepresentable {
+    @Binding var triggerCapture: Bool
+    @Binding var capturedImage: UIImage?
+
     func makeUIView(context: Context) -> BrowMappingPreviewView {
         let view = BrowMappingPreviewView()
         view.start()
         return view
     }
-    
-    func updateUIView(_ uiView: BrowMappingPreviewView, context: Context) {}
-    
+
+    func updateUIView(_ uiView: BrowMappingPreviewView, context: Context) {
+        if triggerCapture {
+            DispatchQueue.main.async {
+                self.capturedImage = uiView.snapshot()
+                self.triggerCapture = false
+            }
+        }
+    }
+
     static func dismantleUIView(_ uiView: BrowMappingPreviewView, coordinator: ()) {
         uiView.stop()
     }
@@ -355,6 +427,13 @@ final class BrowMappingPreviewView: UIView, AVCaptureVideoDataOutputSampleBuffer
             self.isRunning = true
         }
     }
+    
+    func snapshot() -> UIImage? {
+            let renderer = UIGraphicsImageRenderer(bounds: bounds)
+            return renderer.image { _ in
+                drawHierarchy(in: bounds, afterScreenUpdates: true)
+            }
+        }
     
     func stop() {
         sessionQueue.async { [weak self] in
