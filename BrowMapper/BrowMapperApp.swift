@@ -38,7 +38,7 @@ struct ContentView: View {
 
                     Spacer()
 
-                    Text("Gold lines = start, arch, tail, and brow-height guides")
+                    Text("Gold guides + soft mask = ideal brow overlay")
                         .multilineTextAlignment(.center)
                         .font(.system(size: 15, weight: .medium))
                         .padding(.horizontal, 16)
@@ -230,21 +230,19 @@ final class BrowMappingPreviewView: UIView, AVCaptureVideoDataOutputSampleBuffer
         horizontalGuideLayer.lineJoin = .round
         layer.addSublayer(horizontalGuideLayer)
 
-        stencilFillLayer.fillColor = UIColor.systemGreen.withAlphaComponent(0.18).cgColor
+        stencilFillLayer.fillColor = UIColor.systemYellow.withAlphaComponent(0.16).cgColor
         stencilFillLayer.strokeColor = UIColor.clear.cgColor
         stencilFillLayer.lineJoin = .round
-        stencilFillLayer.isHidden = true
         layer.addSublayer(stencilFillLayer)
 
-        stencilStrokeLayer.strokeColor = UIColor.systemGreen.withAlphaComponent(0.95).cgColor
+        stencilStrokeLayer.strokeColor = UIColor.white.withAlphaComponent(0.88).cgColor
         stencilStrokeLayer.fillColor = UIColor.clear.cgColor
-        stencilStrokeLayer.lineWidth = 2.5
+        stencilStrokeLayer.lineWidth = 2
         stencilStrokeLayer.lineJoin = .round
         stencilStrokeLayer.lineCap = .round
         stencilStrokeLayer.shadowOpacity = 0.3
         stencilStrokeLayer.shadowRadius = 2
         stencilStrokeLayer.shadowOffset = .zero
-        stencilStrokeLayer.isHidden = true
         layer.addSublayer(stencilStrokeLayer)
     }
 
@@ -385,10 +383,18 @@ final class BrowMappingPreviewView: UIView, AVCaptureVideoDataOutputSampleBuffer
             horizontalPath.addLine(to: geometry.bottomHorizontalGuideLine[1])
         }
 
+        let fillPath = UIBezierPath()
+        fillPath.append(UIBezierPath(closedPolygon: geometry.leftStencil))
+        fillPath.append(UIBezierPath(closedPolygon: geometry.rightStencil))
+
+        let strokePath = UIBezierPath()
+        strokePath.append(UIBezierPath(closedPolygon: geometry.leftStencil))
+        strokePath.append(UIBezierPath(closedPolygon: geometry.rightStencil))
+
         guideLayer.path = guidePath.cgPath
         horizontalGuideLayer.path = horizontalPath.cgPath
-        stencilFillLayer.path = nil
-        stencilStrokeLayer.path = nil
+        stencilFillLayer.path = fillPath.cgPath
+        stencilStrokeLayer.path = strokePath.cgPath
     }
 }
 
@@ -455,24 +461,35 @@ private struct BrowGeometryBuilder {
             return nil
         }
 
+        let topGuide = topHorizontalGuide(
+            leftStartTop: leftShape.startGuideTop,
+            rightStartTop: rightShape.startGuideTop,
+            leftTailPoint: leftShape.tailPoint,
+            rightTailPoint: rightShape.tailPoint
+        )
+        let bottomGuide = bottomHorizontalGuide(
+            leftBottomY: leftShape.bottomGuideY,
+            rightBottomY: rightShape.bottomGuideY,
+            leftTailPoint: leftShape.tailPoint,
+            rightTailPoint: rightShape.tailPoint
+        )
+
         return BrowOverlayGeometry(
-            leftStencil: leftShape.stencil,
-            rightStencil: rightShape.stencil,
+            leftStencil: perfectBrowOverlay(
+                for: leftShape,
+                topGuideLine: topGuide,
+                bottomGuideLine: bottomGuide
+            ),
+            rightStencil: perfectBrowOverlay(
+                for: rightShape,
+                topGuideLine: topGuide,
+                bottomGuideLine: bottomGuide
+            ),
             leftCenterline: leftShape.centerline,
             rightCenterline: rightShape.centerline,
             guideLines: leftShape.guides + rightShape.guides,
-            topHorizontalGuideLine: topHorizontalGuide(
-                leftStartTop: leftShape.startGuideTop,
-                rightStartTop: rightShape.startGuideTop,
-                leftTailPoint: leftShape.tailPoint,
-                rightTailPoint: rightShape.tailPoint
-            ),
-            bottomHorizontalGuideLine: bottomHorizontalGuide(
-                leftBottomY: leftShape.bottomGuideY,
-                rightBottomY: rightShape.bottomGuideY,
-                leftTailPoint: leftShape.tailPoint,
-                rightTailPoint: rightShape.tailPoint
-            )
+            topHorizontalGuideLine: topGuide,
+            bottomHorizontalGuideLine: bottomGuide
         )
     }
 
@@ -538,7 +555,7 @@ private struct BrowGeometryBuilder {
             guides: guidesInView,
             startGuideTop: startTop.aspectFillMapped(from: imageSize, into: viewSize, mirroredHorizontally: true),
             tailPoint: tailIntersection.aspectFillMapped(from: imageSize, into: viewSize, mirroredHorizontally: true),
-            bottomGuideY: (mappedBrowLine.map(\.y).max() ?? 0) - 2
+            bottomGuideY: (mappedBrowLine.map(\.y).max() ?? 0) - 6
         )
     }
 
@@ -566,6 +583,58 @@ private struct BrowGeometryBuilder {
         let rightPoint = CGPoint(x: Swift.max(leftTailPoint.x, rightTailPoint.x), y: y)
 
         return [leftPoint, rightPoint]
+    }
+
+    private static func perfectBrowOverlay(
+        for shape: BrowShape,
+        topGuideLine: [CGPoint],
+        bottomGuideLine: [CGPoint]
+    ) -> [CGPoint] {
+        guard
+            shape.guides.count >= 3,
+            let topY = horizontalY(for: topGuideLine),
+            let bottomY = horizontalY(for: bottomGuideLine)
+        else {
+            return shape.stencil
+        }
+
+        let headLine = shape.guides[0]
+        let archLine = shape.guides[1]
+        let tailLine = shape.guides[2]
+
+        let innerTopY = topY + (bottomY - topY) * 0.22
+        let archTopY = topY + (bottomY - topY) * 0.04
+        let innerBottomY = bottomY - (bottomY - topY) * 0.06
+        let archBottomY = bottomY - (bottomY - topY) * 0.12
+        let tailTipY = topY + (bottomY - topY) * 0.54
+
+        guard
+            let headTop = pointOnGuide(headLine, atY: innerTopY),
+            let archTop = pointOnGuide(archLine, atY: archTopY),
+            let tailTip = pointOnGuide(tailLine, atY: tailTipY),
+            let archBottom = pointOnGuide(archLine, atY: archBottomY),
+            let headBottom = pointOnGuide(headLine, atY: innerBottomY)
+        else {
+            return shape.stencil
+        }
+
+        return [headTop, archTop, tailTip, archBottom, headBottom]
+    }
+
+    private static func horizontalY(for line: [CGPoint]) -> CGFloat? {
+        guard line.count == 2 else { return nil }
+        return (line[0].y + line[1].y) * 0.5
+    }
+
+    private static func pointOnGuide(_ line: [CGPoint], atY y: CGFloat) -> CGPoint? {
+        guard line.count == 2 else { return nil }
+        let start = line[0]
+        let end = line[1]
+        let deltaY = end.y - start.y
+        guard abs(deltaY) > 0.0001 else { return CGPoint(x: start.x, y: y) }
+
+        let t = (y - start.y) / deltaY
+        return start + (end - start) * t
     }
 }
 
