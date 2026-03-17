@@ -10,9 +10,22 @@
 		54356B4A2F44F5360082FDAD /* BrowMapper.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BrowMapper.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		5489A62D2F68DEC600BE0390 /* Exceptions for "BrowMapper" folder in "BrowMapper" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 54356B492F44F5360082FDAD /* BrowMapper */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		54356B4C2F44F5360082FDAD /* BrowMapper */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				5489A62D2F68DEC600BE0390 /* Exceptions for "BrowMapper" folder in "BrowMapper" target */,
+			);
 			path = BrowMapper;
 			sourceTree = "<group>";
 		};
@@ -256,6 +269,7 @@
 				DEVELOPMENT_TEAM = 9B7D3RY8KY;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = BrowMapper/Info.plist;
 				INFOPLIST_KEY_NSCameraUsageDescription = "We need access to the camera to map your eyebrows.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "This app needs permission to save your brow mapping stencils directly to your camera roll.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -290,6 +304,7 @@
 				DEVELOPMENT_TEAM = 9B7D3RY8KY;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = BrowMapper/Info.plist;
 				INFOPLIST_KEY_NSCameraUsageDescription = "We need access to the camera to map your eyebrows.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "This app needs permission to save your brow mapping stencils directly to your camera roll.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;

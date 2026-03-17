@@ -44,6 +44,7 @@ struct ContentView: View {
     @State private var showLevelIndicator: Bool = true
     @State private var triggerCapture: Bool = false
     @State private var capturedImage: UIImage? = nil
+    @State private var showPreview: Bool = false
     
     // State for the snackbar
     @State private var showSavedSnackBar: Bool = false
@@ -178,9 +179,8 @@ struct ContentView: View {
                 .zIndex(2)
                 
                 // Live Camera View Layer
-                BrowMappingCameraView(triggerCapture: $triggerCapture, capturedImage: $capturedImage)
+                BrowMappingCameraView(triggerCapture: $triggerCapture, capturedImage: $capturedImage, showPreview: $showPreview)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .clipped()
                 
                 // Bottom White Area
                 Color(white: 0.98)
@@ -192,48 +192,54 @@ struct ContentView: View {
             VStack(spacing: 16) {
                 // Info Card
                 /*
-                HStack(spacing: 16) {
-                    // Avatar Placeholder
-                    ZStack {
-                        Circle()
-                            .fill(Color(white: 0.9))
-                            .frame(width: 48, height: 48)
-                        Image(systemName: "person.fill")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(height: 24)
-                            .foregroundColor(.gray)
-                            .offset(y: 4)
-                            .clipShape(Circle())
-                    }
-                    
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Sarah Jenkins")
-                            .font(.system(size: 17, weight: .medium))
-                            .foregroundColor(Color(white: 0.2))
-                        Text("Last visit: 2 weeks ago • Soft arch")
-                            .font(.system(size: 14, weight: .regular))
-                            .foregroundColor(Color.gray)
-                    }
-                    Spacer()
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 14)
-                .background(Color.white)
-                .cornerRadius(16)
-                .shadow(color: Color.black.opacity(0.06), radius: 10, x: 0, y: 4)
-                */
+                 HStack(spacing: 16) {
+                 // Avatar Placeholder
+                 ZStack {
+                 Circle()
+                 .fill(Color(white: 0.9))
+                 .frame(width: 48, height: 48)
+                 Image(systemName: "person.fill")
+                 .resizable()
+                 .scaledToFit()
+                 .frame(height: 24)
+                 .foregroundColor(.gray)
+                 .offset(y: 4)
+                 .clipShape(Circle())
+                 }
+                 
+                 VStack(alignment: .leading, spacing: 4) {
+                 Text("Sarah Jenkins")
+                 .font(.system(size: 17, weight: .medium))
+                 .foregroundColor(Color(white: 0.2))
+                 Text("Last visit: 2 weeks ago • Soft arch")
+                 .font(.system(size: 14, weight: .regular))
+                 .foregroundColor(Color.gray)
+                 }
+                 Spacer()
+                 }
+                 .padding(.horizontal, 16)
+                 .padding(.vertical, 14)
+                 .background(Color.white)
+                 .cornerRadius(16)
+                 .shadow(color: Color.black.opacity(0.06), radius: 10, x: 0, y: 4)
+                 */
                 // Controls Card
                 HStack {
-                    VStack(spacing: 10) {
-                        Image(systemName: "mappin.and.ellipse")
-                            .font(.system(size: 22))
-                            .foregroundColor(Color(white: 0.3))
-                        Text("Align Points")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundColor(Color.gray)
+                    Button(action: {
+                        showPreview.toggle()
+                    }) {
+                        VStack(spacing: 10) {
+                            Image(systemName: showPreview ? "eye.fill" : "eye")
+                                .font(.system(size: 22))
+                                .foregroundColor(showPreview ? Color.black : Color(white: 0.3))
+                            Text("Preview")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(showPreview ? Color.black : Color.gray)
+                        }
+                        .frame(maxWidth: .infinity)
                     }
-                    .frame(maxWidth: .infinity)
+                    
+                    .clipped()
                     
                     Divider().frame(height: 40)
                     
@@ -353,14 +359,19 @@ final class CameraPermissionModel: ObservableObject {
 struct BrowMappingCameraView: UIViewRepresentable {
     @Binding var triggerCapture: Bool
     @Binding var capturedImage: UIImage?
-
+    @Binding var showPreview: Bool // NEW
+    
     func makeUIView(context: Context) -> BrowMappingPreviewView {
         let view = BrowMappingPreviewView()
+        view.showPreview = showPreview // Set initial state
         view.start()
         return view
     }
-
+    
     func updateUIView(_ uiView: BrowMappingPreviewView, context: Context) {
+        // Update the view whenever the toggle is pressed
+        uiView.showPreview = showPreview
+        
         if triggerCapture {
             DispatchQueue.main.async {
                 // Immediately reset the trigger to prevent looping
@@ -375,12 +386,11 @@ struct BrowMappingCameraView: UIViewRepresentable {
             }
         }
     }
-
+    
     static func dismantleUIView(_ uiView: BrowMappingPreviewView, coordinator: ()) {
         uiView.stop()
     }
 }
-
 // MARK: - Vision Camera View
 final class BrowMappingPreviewView: UIView, AVCaptureVideoDataOutputSampleBufferDelegate {
     private let session = AVCaptureSession()
@@ -388,6 +398,12 @@ final class BrowMappingPreviewView: UIView, AVCaptureVideoDataOutputSampleBuffer
     
     private let redGuidesLayer = CAShapeLayer()
     private let purpleGuidesLayer = CAShapeLayer()
+    
+    // NEW: Spine & Envelope Realistic Brow Layers
+    private let leftBrowGradientLayer = CAGradientLayer()
+    private let rightBrowGradientLayer = CAGradientLayer()
+    private let leftBrowShapeLayer = CAShapeLayer()
+    private let rightBrowShapeLayer = CAShapeLayer()
     
     private let sessionQueue = DispatchQueue(label: "brow.session.queue")
     private let videoQueue = DispatchQueue(label: "brow.video.queue")
@@ -418,7 +434,18 @@ final class BrowMappingPreviewView: UIView, AVCaptureVideoDataOutputSampleBuffer
         previewLayer.frame = bounds
         redGuidesLayer.frame = bounds
         purpleGuidesLayer.frame = bounds
+        leftBrowGradientLayer.frame = bounds
+        rightBrowGradientLayer.frame = bounds
         currentViewSize = bounds.size
+    }
+    
+    // Toggles the visibility of the brow overlays vs scaffolding
+    var showPreview: Bool = false {
+        didSet {
+            DispatchQueue.main.async { [weak self] in
+                self?.updateLayerVisibility()
+            }
+        }
     }
     
     func start() {
@@ -468,6 +495,55 @@ final class BrowMappingPreviewView: UIView, AVCaptureVideoDataOutputSampleBuffer
         purpleGuidesLayer.lineCap = .butt
         purpleGuidesLayer.lineJoin = .miter
         layer.addSublayer(purpleGuidesLayer)
+        
+        // NEW: Setup Ombré Brow Gradient & Shape Masking
+        let darkBrown = UIColor(red: 0.25, green: 0.15, blue: 0.1, alpha: 1.0).cgColor
+        let lightBrown = UIColor(red: 0.25, green: 0.15, blue: 0.1, alpha: 0.3).cgColor
+        let clear = UIColor.clear.cgColor
+        
+        // Physical Left Brow (On the Right side of the screen)
+        leftBrowGradientLayer.colors = [lightBrown, darkBrown, darkBrown, clear]
+        leftBrowGradientLayer.locations = [0.0, 0.4, 0.9, 1.0]
+        leftBrowGradientLayer.startPoint = CGPoint(x: 0.0, y: 0.5)
+        leftBrowGradientLayer.endPoint = CGPoint(x: 1.0, y: 0.5)
+        leftBrowGradientLayer.mask = leftBrowShapeLayer
+        
+        // Physical Right Brow (On the Left side of the screen)
+        rightBrowGradientLayer.colors = [lightBrown, darkBrown, darkBrown, clear]
+        rightBrowGradientLayer.locations = [0.0, 0.4, 0.9, 1.0]
+        rightBrowGradientLayer.startPoint = CGPoint(x: 1.0, y: 0.5)
+        rightBrowGradientLayer.endPoint = CGPoint(x: 0.0, y: 0.5)
+        rightBrowGradientLayer.mask = rightBrowShapeLayer
+        
+        // Edge Feathering
+        leftBrowGradientLayer.shadowColor = darkBrown
+        leftBrowGradientLayer.shadowRadius = 2.0
+        leftBrowGradientLayer.shadowOpacity = 0.6
+        leftBrowGradientLayer.shadowOffset = .zero
+        
+        rightBrowGradientLayer.shadowColor = darkBrown
+        rightBrowGradientLayer.shadowRadius = 2.0
+        rightBrowGradientLayer.shadowOpacity = 0.6
+        rightBrowGradientLayer.shadowOffset = .zero
+        
+        layer.addSublayer(leftBrowGradientLayer)
+        layer.addSublayer(rightBrowGradientLayer)
+        updateLayerVisibility()
+    }
+    
+    private func updateLayerVisibility() {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true) // Prevents laggy crossfade animations
+        
+        // Show solid brows ONLY if preview is active
+        leftBrowGradientLayer.isHidden = !showPreview
+        rightBrowGradientLayer.isHidden = !showPreview
+        
+        // Show scaffolding ONLY if preview is inactive
+        redGuidesLayer.isHidden = showPreview
+        purpleGuidesLayer.isHidden = showPreview
+        
+        CATransaction.commit()
     }
     
     private func configureSession() {
@@ -591,6 +667,10 @@ final class BrowMappingPreviewView: UIView, AVCaptureVideoDataOutputSampleBuffer
                     // 3. Render the guide layers explicitly on top
                     self.redGuidesLayer.render(in: ctx.cgContext)
                     self.purpleGuidesLayer.render(in: ctx.cgContext)
+                    
+                    // NEW: Render the solid brow shapes
+                    self.leftBrowGradientLayer.render(in: ctx.cgContext)
+                    self.rightBrowGradientLayer.render(in: ctx.cgContext)
                 }
                 
                 completion(finalImage)
@@ -607,6 +687,8 @@ final class BrowMappingPreviewView: UIView, AVCaptureVideoDataOutputSampleBuffer
         DispatchQueue.main.async { [weak self] in
             self?.redGuidesLayer.path = nil
             self?.purpleGuidesLayer.path = nil
+            self?.leftBrowShapeLayer.path = nil
+            self?.rightBrowShapeLayer.path = nil
         }
     }
     
@@ -626,6 +708,56 @@ final class BrowMappingPreviewView: UIView, AVCaptureVideoDataOutputSampleBuffer
             purplePath.addLine(to: line[1])
         }
         purpleGuidesLayer.path = purplePath
+        
+        // NEW: Draw the Organic Spine & Envelope Shapes
+        leftBrowShapeLayer.path = createOrganicBrowPath(from: geometry.physLeftShape, isScreenRightSide: true)
+        
+        if let lPath = leftBrowShapeLayer.path {
+            leftBrowGradientLayer.frame = lPath.boundingBoxOfPath
+            var transform = CGAffineTransform(translationX: -lPath.boundingBoxOfPath.minX, y: -lPath.boundingBoxOfPath.minY)
+            leftBrowShapeLayer.path = lPath.copy(using: &transform)
+        }
+        
+        rightBrowShapeLayer.path = createOrganicBrowPath(from: geometry.physRightShape, isScreenRightSide: false)
+        
+        if let rPath = rightBrowShapeLayer.path {
+            rightBrowGradientLayer.frame = rPath.boundingBoxOfPath
+            var transform = CGAffineTransform(translationX: -rPath.boundingBoxOfPath.minX, y: -rPath.boundingBoxOfPath.minY)
+            rightBrowShapeLayer.path = rPath.copy(using: &transform)
+        }
+    }
+    
+    // Generates the Bezier paths over the calculated Spine & Envelope anchors
+    private func createOrganicBrowPath(from shape: BrowShapeData, isScreenRightSide: Bool) -> CGPath {
+        let path = CGMutablePath()
+        
+        // 1. Move to Top Inner Corner
+        path.move(to: shape.p0Top)
+        
+        // 2. Upper Edge to Arch Peak (Slight pull upward over the brow bone)
+        let cpTop1 = CGPoint(x: (shape.p0Top.x + shape.p1Top.x) / 2, y: shape.p1Top.y)
+        path.addQuadCurve(to: shape.p1Top, control: cpTop1)
+        
+        // 3. Upper Edge from Arch Peak to Tail Tip (Tapering exactly to 0)
+        let cpTop2 = CGPoint(x: (shape.p1Top.x + shape.p2Tip.x) / 2, y: shape.p1Top.y)
+        path.addQuadCurve(to: shape.p2Tip, control: cpTop2)
+        
+        // 4. Lower Edge from Tail Tip back to Arch Base
+        let cpBottom2 = CGPoint(x: (shape.p1Bottom.x + shape.p2Tip.x) / 2, y: shape.p1Bottom.y)
+        path.addQuadCurve(to: shape.p1Bottom, control: cpBottom2)
+        
+        // 5. Lower Edge from Arch Base to Bottom Inner Corner
+        let cpBottom1 = CGPoint(x: (shape.p0Bottom.x + shape.p1Bottom.x) / 2, y: shape.p1Bottom.y)
+        path.addQuadCurve(to: shape.p0Bottom, control: cpBottom1)
+        
+        // 6. Soft Inner Bulb (Inward bulge towards the nose to avoid blockiness)
+        let thickness = shape.p0Bottom.y - shape.p0Top.y
+        let bulgeOffset = thickness * 0.25
+        let cpFrontX = isScreenRightSide ? (shape.p0Top.x - bulgeOffset) : (shape.p0Top.x + bulgeOffset)
+        let cpFront = CGPoint(x: cpFrontX, y: (shape.p0Top.y + shape.p0Bottom.y) / 2)
+        path.addQuadCurve(to: shape.p0Top, control: cpFront)
+        
+        return path
     }
 }
 
@@ -640,7 +772,6 @@ private struct BrowGeometryBuilder {
             let nose = landmarks.nose?.imagePoints(in: face, imageSize: imageSize)
         else { return nil }
         
-        // Mapped to View space natively
         let mappedLeftBrow = leftBrow.map { $0.aspectFillMapped(from: imageSize, into: viewSize, mirroredHorizontally: true) }
         let mappedRightBrow = rightBrow.map { $0.aspectFillMapped(from: imageSize, into: viewSize, mirroredHorizontally: true) }
         let mappedLeftEye = leftEye.map { $0.aspectFillMapped(from: imageSize, into: viewSize, mirroredHorizontally: true) }
@@ -650,14 +781,12 @@ private struct BrowGeometryBuilder {
         let mappedLeftPupil = landmarks.leftPupil?.imagePoints(in: face, imageSize: imageSize).first?.aspectFillMapped(from: imageSize, into: viewSize, mirroredHorizontally: true)
         let mappedRightPupil = landmarks.rightPupil?.imagePoints(in: face, imageSize: imageSize).first?.aspectFillMapped(from: imageSize, into: viewSize, mirroredHorizontally: true)
         
-        // 1. Identify screen-left and screen-right nostrils
         let lowerNose = mappedNose.filter { $0.y >= (mappedNose.map(\.y).reduce(0, +) / CGFloat(mappedNose.count)) }
         guard
             let screenLeftNostril = lowerNose.min(by: { $0.x < $1.x }),
             let screenRightNostril = lowerNose.max(by: { $0.x < $1.x })
         else { return nil }
         
-        // Vision's "left" is the user's physical left, which is on the RIGHT side of the mirrored screen.
         let physLeftNostril = screenRightNostril
         let physRightNostril = screenLeftNostril
         
@@ -667,73 +796,122 @@ private struct BrowGeometryBuilder {
         let leftPupilPt = mappedLeftPupil ?? mappedLeftEye.center()
         let rightPupilPt = mappedRightPupil ?? mappedRightEye.center()
         
-        // --- NEW: Calculate Iris Edges ---
-        
-        // Outer and Inner eye corners
         let leftOuterEyePt = mappedLeftEye.max(by: { $0.x < $1.x }) ?? .zero
         let leftInnerEyePt = mappedLeftEye.min(by: { $0.x < $1.x }) ?? .zero
-        
         let rightOuterEyePt = mappedRightEye.min(by: { $0.x < $1.x }) ?? .zero
         let rightInnerEyePt = mappedRightEye.max(by: { $0.x < $1.x }) ?? .zero
         
-        // Iris radius is ~22% of total eye width
         let leftEyeWidth = leftOuterEyePt.x - leftInnerEyePt.x
         let rightEyeWidth = rightInnerEyePt.x - rightOuterEyePt.x
         
-        // Physical left eye is screen-right, so we move +X to go outward toward the ear
         let leftIrisOuterPt = CGPoint(x: leftPupilPt.x + (leftEyeWidth * 0.22), y: leftPupilPt.y)
-        // Physical right eye is screen-left, so we move -X to go outward toward the ear
         let rightIrisOuterPt = CGPoint(x: rightPupilPt.x - (rightEyeWidth * 0.22), y: rightPupilPt.y)
-        
-        // ---------------------------------
         
         let leftBrowStart = mappedLeftBrow.max(by: { $0.x < $1.x }) ?? .zero
         let rightBrowStart = mappedRightBrow.min(by: { $0.x < $1.x }) ?? .zero
         
         let topY = (leftBrowStart.y + rightBrowStart.y) * 0.5 - 10
         let bottomY = (leftBrowStart.y + rightBrowStart.y) * 0.5 + 10
-        
         let extL = screenLeftNostril.x - 90
         let extR = screenRightNostril.x + 90
         
-        // Yellow Lines (Verticals and Horizontals)
         let redLines = [
-            [CGPoint(x: centerX, y: 0), CGPoint(x: centerX, y: noseTipY)], // Center Vertical
-            [CGPoint(x: screenLeftNostril.x, y: 0), screenLeftNostril], // Left Inner Vertical
-            [CGPoint(x: screenRightNostril.x, y: 0), screenRightNostril], // Right Inner Vertical
-            [CGPoint(x: extL, y: topY), CGPoint(x: extR, y: topY)], // Top Horizontal
-            [CGPoint(x: extL, y: bottomY), CGPoint(x: extR, y: bottomY)] // Bottom Horizontal
+            [CGPoint(x: centerX, y: 0), CGPoint(x: centerX, y: noseTipY)],
+            [CGPoint(x: screenLeftNostril.x, y: 0), screenLeftNostril],
+            [CGPoint(x: screenRightNostril.x, y: 0), screenRightNostril],
+            [CGPoint(x: extL, y: topY), CGPoint(x: extR, y: topY)],
+            [CGPoint(x: extL, y: bottomY), CGPoint(x: extR, y: bottomY)]
         ]
         
         let length: CGFloat = 450
         
-        // Map physical sides to physical sides, now targeting the outer iris!
         let lArchDir = (leftIrisOuterPt - physLeftNostril).normalized
         let lTailDir = (leftOuterEyePt - physLeftNostril).normalized
         let rArchDir = (rightIrisOuterPt - physRightNostril).normalized
         let rTailDir = (rightOuterEyePt - physRightNostril).normalized
         
-        // White Lines (Diagonals)
+        guard lArchDir.y != 0, lTailDir.y != 0, rArchDir.y != 0, rTailDir.y != 0 else { return nil }
+        
         let purpleLines = [
-            [physLeftNostril, physLeftNostril + lArchDir * length], // Left Arch
-            [physLeftNostril, physLeftNostril + lTailDir * length], // Left Tail
-            [physRightNostril, physRightNostril + rArchDir * length], // Right Arch
-            [physRightNostril, physRightNostril + rTailDir * length]  // Right Tail
+            [physLeftNostril, physLeftNostril + lArchDir * length],
+            [physLeftNostril, physLeftNostril + lTailDir * length],
+            [physRightNostril, physRightNostril + rArchDir * length],
+            [physRightNostril, physRightNostril + rTailDir * length]
         ]
         
-        return BrowOverlayGeometry(redLines: redLines, purpleLines: purpleLines)
+        // --- PHASE 1 & 2: CALCULATE SPINE ANCHORS & NATURAL THICKNESS ENVELOPE ---
+        let defaultThickness = max(12.0, viewSize.width * 0.035)
+        
+        // Physical Left Brow (Screen Right Side)
+        let lArchT = (topY - physLeftNostril.y) / lArchDir.y
+        let lArchAnchor = physLeftNostril + lArchDir * lArchT
+        let lTailT = (bottomY - physLeftNostril.y) / lTailDir.y
+        let lTailAnchor = physLeftNostril + lTailDir * lTailT
+        let lStartAnchor = CGPoint(x: physLeftNostril.x, y: leftBrowStart.y)
+        
+        let physLeftShape = BrowShapeData(
+            p0Top: CGPoint(x: lStartAnchor.x, y: lStartAnchor.y - defaultThickness/2),
+            p1Top: CGPoint(x: lArchAnchor.x, y: topY),
+            p2Tip: lTailAnchor,
+            p1Bottom: CGPoint(x: lArchAnchor.x, y: topY + defaultThickness),
+            p0Bottom: CGPoint(x: lStartAnchor.x, y: lStartAnchor.y + defaultThickness/2)
+        )
+        
+        // Physical Right Brow (Screen Left Side)
+        let rArchT = (topY - physRightNostril.y) / rArchDir.y
+        let rArchAnchor = physRightNostril + rArchDir * rArchT
+        let rTailT = (bottomY - physRightNostril.y) / rTailDir.y
+        let rTailAnchor = physRightNostril + rTailDir * rTailT
+        let rStartAnchor = CGPoint(x: physRightNostril.x, y: rightBrowStart.y)
+        
+        let physRightShape = BrowShapeData(
+            p0Top: CGPoint(x: rStartAnchor.x, y: rStartAnchor.y - defaultThickness/2),
+            p1Top: CGPoint(x: rArchAnchor.x, y: topY),
+            p2Tip: rTailAnchor,
+            p1Bottom: CGPoint(x: rArchAnchor.x, y: topY + defaultThickness),
+            p0Bottom: CGPoint(x: rStartAnchor.x, y: rStartAnchor.y + defaultThickness/2)
+        )
+        
+        return BrowOverlayGeometry(
+            redLines: redLines,
+            purpleLines: purpleLines,
+            physLeftShape: physLeftShape,
+            physRightShape: physRightShape
+        )
     }
 }
 
 // MARK: - Geometry State
+private struct BrowShapeData {
+    var p0Top: CGPoint
+    var p1Top: CGPoint
+    var p2Tip: CGPoint
+    var p1Bottom: CGPoint
+    var p0Bottom: CGPoint
+    
+    func blended(with previous: BrowShapeData, alpha: CGFloat) -> BrowShapeData {
+        return BrowShapeData(
+            p0Top: p0Top.blended(with: previous.p0Top, alpha: alpha),
+            p1Top: p1Top.blended(with: previous.p1Top, alpha: alpha),
+            p2Tip: p2Tip.blended(with: previous.p2Tip, alpha: alpha),
+            p1Bottom: p1Bottom.blended(with: previous.p1Bottom, alpha: alpha),
+            p0Bottom: p0Bottom.blended(with: previous.p0Bottom, alpha: alpha)
+        )
+    }
+}
+
 private struct BrowOverlayGeometry {
     let redLines: [[CGPoint]]
     let purpleLines: [[CGPoint]]
+    let physLeftShape: BrowShapeData
+    let physRightShape: BrowShapeData
     
     func blended(with previous: BrowOverlayGeometry, alpha: CGFloat) -> BrowOverlayGeometry {
         return BrowOverlayGeometry(
             redLines: blendLines(current: redLines, previous: previous.redLines, alpha: alpha),
-            purpleLines: blendLines(current: purpleLines, previous: previous.purpleLines, alpha: alpha)
+            purpleLines: blendLines(current: purpleLines, previous: previous.purpleLines, alpha: alpha),
+            physLeftShape: physLeftShape.blended(with: previous.physLeftShape, alpha: alpha),
+            physRightShape: physRightShape.blended(with: previous.physRightShape, alpha: alpha)
         )
     }
     
@@ -742,7 +920,7 @@ private struct BrowOverlayGeometry {
         return zip(current, previous).map { currLine, prevLine in
             guard currLine.count == prevLine.count else { return currLine }
             return zip(currLine, prevLine).map { cPt, pPt in
-                CGPoint(x: pPt.x + (cPt.x - pPt.x) * alpha, y: pPt.y + (cPt.y - pPt.y) * alpha)
+                cPt.blended(with: pPt, alpha: alpha)
             }
         }
     }
@@ -809,5 +987,9 @@ private extension CGPoint {
         var point = CGPoint(x: x * scale + xOffset, y: y * scale + yOffset)
         if mirroredHorizontally { point.x = viewSize.width - point.x }
         return point
+    }
+    
+    func blended(with previous: CGPoint, alpha: CGFloat) -> CGPoint {
+        return CGPoint(x: previous.x + (self.x - previous.x) * alpha, y: previous.y + (self.y - previous.y) * alpha)
     }
 }
