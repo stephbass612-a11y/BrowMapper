@@ -408,7 +408,7 @@ final class BrowMappingPreviewView: UIView, AVCaptureVideoDataOutputSampleBuffer
     private let sessionQueue = DispatchQueue(label: "brow.session.queue")
     private let videoQueue = DispatchQueue(label: "brow.video.queue")
     
-    private let overlaySmoother = BrowOverlaySmoother(alpha: 0.25)
+    private let overlaySmoother = BrowOverlaySmoother(alpha: 0.08) // Aggressive smoothing to stop the wiggle
     
     private var isConfigured = false
     private var isRunning = false
@@ -434,8 +434,13 @@ final class BrowMappingPreviewView: UIView, AVCaptureVideoDataOutputSampleBuffer
         previewLayer.frame = bounds
         redGuidesLayer.frame = bounds
         purpleGuidesLayer.frame = bounds
+        
+        // Lock everything to the full screen bounds to prevent drifting
         leftBrowGradientLayer.frame = bounds
         rightBrowGradientLayer.frame = bounds
+        leftBrowShapeLayer.frame = bounds
+        rightBrowShapeLayer.frame = bounds
+        
         currentViewSize = bounds.size
     }
     
@@ -500,6 +505,8 @@ final class BrowMappingPreviewView: UIView, AVCaptureVideoDataOutputSampleBuffer
         let darkBrown = UIColor(red: 0.25, green: 0.15, blue: 0.1, alpha: 1.0).cgColor
         let lightBrown = UIColor(red: 0.25, green: 0.15, blue: 0.1, alpha: 0.3).cgColor
         let clear = UIColor.clear.cgColor
+        leftBrowShapeLayer.fillColor = UIColor.black.cgColor
+        rightBrowShapeLayer.fillColor = UIColor.black.cgColor
         
         // Physical Left Brow (On the Right side of the screen)
         leftBrowGradientLayer.colors = [lightBrown, darkBrown, darkBrown, clear]
@@ -693,6 +700,17 @@ final class BrowMappingPreviewView: UIView, AVCaptureVideoDataOutputSampleBuffer
     }
     
     private func draw(_ geometry: BrowOverlayGeometry) {
+        // Disable implicit animations so nothing lags or drifts
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        
+        let viewWidth = currentViewSize.width
+        guard viewWidth > 0 else {
+            CATransaction.commit()
+            return
+        }
+        
+        // --- Draw Scaffolding Lines ---
         let redPath = CGMutablePath()
         for line in geometry.redLines {
             guard line.count == 2 else { continue }
@@ -709,22 +727,32 @@ final class BrowMappingPreviewView: UIView, AVCaptureVideoDataOutputSampleBuffer
         }
         purpleGuidesLayer.path = purplePath
         
-        // NEW: Draw the Organic Spine & Envelope Shapes
-        leftBrowShapeLayer.path = createOrganicBrowPath(from: geometry.physLeftShape, isScreenRightSide: true)
+        // --- Draw Organic Brow Shapes ---
         
-        if let lPath = leftBrowShapeLayer.path {
-            leftBrowGradientLayer.frame = lPath.boundingBoxOfPath
-            var transform = CGAffineTransform(translationX: -lPath.boundingBoxOfPath.minX, y: -lPath.boundingBoxOfPath.minY)
-            leftBrowShapeLayer.path = lPath.copy(using: &transform)
-        }
+        // Physical Left Brow (Screen Right Side)
+        let leftPath = createOrganicBrowPath(from: geometry.physLeftShape, isScreenRightSide: true)
+        let leftBounds = leftPath.boundingBoxOfPath
         
-        rightBrowShapeLayer.path = createOrganicBrowPath(from: geometry.physRightShape, isScreenRightSide: false)
+        // Apply path directly without transforming coordinates
+        leftBrowShapeLayer.path = leftPath
         
-        if let rPath = rightBrowShapeLayer.path {
-            rightBrowGradientLayer.frame = rPath.boundingBoxOfPath
-            var transform = CGAffineTransform(translationX: -rPath.boundingBoxOfPath.minX, y: -rPath.boundingBoxOfPath.minY)
-            rightBrowShapeLayer.path = rPath.copy(using: &transform)
-        }
+        // Dynamically shift the Ombré fade to match the brow's exact location on screen
+        leftBrowGradientLayer.startPoint = CGPoint(x: leftBounds.minX / viewWidth, y: 0.5)
+        leftBrowGradientLayer.endPoint = CGPoint(x: leftBounds.maxX / viewWidth, y: 0.5)
+        
+        
+        // Physical Right Brow (Screen Left Side)
+        let rightPath = createOrganicBrowPath(from: geometry.physRightShape, isScreenRightSide: false)
+        let rightBounds = rightPath.boundingBoxOfPath
+        
+        // Apply path directly without transforming coordinates
+        rightBrowShapeLayer.path = rightPath
+        
+        // Dynamically shift the Ombré fade to match the brow's exact location on screen
+        rightBrowGradientLayer.startPoint = CGPoint(x: rightBounds.maxX / viewWidth, y: 0.5)
+        rightBrowGradientLayer.endPoint = CGPoint(x: rightBounds.minX / viewWidth, y: 0.5)
+        
+        CATransaction.commit()
     }
     
     // Generates the Bezier paths over the calculated Spine & Envelope anchors
@@ -750,12 +778,9 @@ final class BrowMappingPreviewView: UIView, AVCaptureVideoDataOutputSampleBuffer
         let cpBottom1 = CGPoint(x: (shape.p0Bottom.x + shape.p1Bottom.x) / 2, y: shape.p1Bottom.y)
         path.addQuadCurve(to: shape.p0Bottom, control: cpBottom1)
         
-        // 6. Soft Inner Bulb (Inward bulge towards the nose to avoid blockiness)
-        let thickness = shape.p0Bottom.y - shape.p0Top.y
-        let bulgeOffset = thickness * 0.25
-        let cpFrontX = isScreenRightSide ? (shape.p0Top.x - bulgeOffset) : (shape.p0Top.x + bulgeOffset)
-        let cpFront = CGPoint(x: cpFrontX, y: (shape.p0Top.y + shape.p0Bottom.y) / 2)
-        path.addQuadCurve(to: shape.p0Top, control: cpFront)
+        // 6. Soft Inner Bulb
+                // We remove the geometric outward bulge and let the Ombre gradient handle the natural fade
+                path.addLine(to: shape.p0Top)
         
         return path
     }
@@ -840,44 +865,55 @@ private struct BrowGeometryBuilder {
         ]
         
         // --- PHASE 1 & 2: CALCULATE SPINE ANCHORS & NATURAL THICKNESS ENVELOPE ---
-        let defaultThickness = max(12.0, viewSize.width * 0.035)
-        
-        // Physical Left Brow (Screen Right Side)
-        let lArchT = (topY - physLeftNostril.y) / lArchDir.y
-        let lArchAnchor = physLeftNostril + lArchDir * lArchT
-        let lTailT = (bottomY - physLeftNostril.y) / lTailDir.y
-        let lTailAnchor = physLeftNostril + lTailDir * lTailT
-        let lStartAnchor = CGPoint(x: physLeftNostril.x, y: leftBrowStart.y)
-        
-        let physLeftShape = BrowShapeData(
-            p0Top: CGPoint(x: lStartAnchor.x, y: lStartAnchor.y - defaultThickness/2),
-            p1Top: CGPoint(x: lArchAnchor.x, y: topY),
-            p2Tip: lTailAnchor,
-            p1Bottom: CGPoint(x: lArchAnchor.x, y: topY + defaultThickness),
-            p0Bottom: CGPoint(x: lStartAnchor.x, y: lStartAnchor.y + defaultThickness/2)
-        )
-        
-        // Physical Right Brow (Screen Left Side)
-        let rArchT = (topY - physRightNostril.y) / rArchDir.y
-        let rArchAnchor = physRightNostril + rArchDir * rArchT
-        let rTailT = (bottomY - physRightNostril.y) / rTailDir.y
-        let rTailAnchor = physRightNostril + rTailDir * rTailT
-        let rStartAnchor = CGPoint(x: physRightNostril.x, y: rightBrowStart.y)
-        
-        let physRightShape = BrowShapeData(
-            p0Top: CGPoint(x: rStartAnchor.x, y: rStartAnchor.y - defaultThickness/2),
-            p1Top: CGPoint(x: rArchAnchor.x, y: topY),
-            p2Tip: rTailAnchor,
-            p1Bottom: CGPoint(x: rArchAnchor.x, y: topY + defaultThickness),
-            p0Bottom: CGPoint(x: rStartAnchor.x, y: rStartAnchor.y + defaultThickness/2)
-        )
-        
-        return BrowOverlayGeometry(
-            redLines: redLines,
-            purpleLines: purpleLines,
-            physLeftShape: physLeftShape,
-            physRightShape: physRightShape
-        )
+                // 1. Much thinner, elegant default thickness
+                let defaultThickness = max(6.0, viewSize.width * 0.02)
+                
+                // 2. Find natural Y-peaks from Vision to prevent the "flat unibrow" block look
+                let leftNaturalPeakY = mappedLeftBrow.min(by: { $0.y < $1.y })?.y ?? topY
+                let rightNaturalPeakY = mappedRightBrow.min(by: { $0.y < $1.y })?.y ?? topY
+                
+                let leftNaturalStartY = mappedLeftBrow.max(by: { $0.x < $1.x })?.y ?? bottomY
+                let rightNaturalStartY = mappedRightBrow.min(by: { $0.x < $1.x })?.y ?? bottomY
+
+                // Physical Left Brow (Screen Right Side)
+                let lArchT = (leftNaturalPeakY - physLeftNostril.y) / lArchDir.y
+                let lArchAnchor = physLeftNostril + lArchDir * lArchT
+                
+                // Tail shouldn't drop below the start of the brow (classic beauty rule)
+                let lTailT = (leftNaturalStartY - physLeftNostril.y) / lTailDir.y
+                let lTailAnchor = physLeftNostril + lTailDir * lTailT
+                let lStartAnchor = CGPoint(x: physLeftNostril.x, y: leftNaturalStartY)
+                
+                let physLeftShape = BrowShapeData(
+                    p0Top: CGPoint(x: lStartAnchor.x, y: lStartAnchor.y - defaultThickness),
+                    p1Top: CGPoint(x: lArchAnchor.x, y: lArchAnchor.y - defaultThickness),
+                    p2Tip: lTailAnchor, // Tapers beautifully to 0
+                    p1Bottom: CGPoint(x: lArchAnchor.x, y: lArchAnchor.y + defaultThickness * 0.5),
+                    p0Bottom: CGPoint(x: lStartAnchor.x, y: lStartAnchor.y + defaultThickness)
+                )
+                
+                // Physical Right Brow (Screen Left Side)
+                let rArchT = (rightNaturalPeakY - physRightNostril.y) / rArchDir.y
+                let rArchAnchor = physRightNostril + rArchDir * rArchT
+                
+                let rTailT = (rightNaturalStartY - physRightNostril.y) / rTailDir.y
+                let rTailAnchor = physRightNostril + rTailDir * rTailT
+                let rStartAnchor = CGPoint(x: physRightNostril.x, y: rightNaturalStartY)
+                
+                let physRightShape = BrowShapeData(
+                    p0Top: CGPoint(x: rStartAnchor.x, y: rStartAnchor.y - defaultThickness),
+                    p1Top: CGPoint(x: rArchAnchor.x, y: rArchAnchor.y - defaultThickness),
+                    p2Tip: rTailAnchor,
+                    p1Bottom: CGPoint(x: rArchAnchor.x, y: rArchAnchor.y + defaultThickness * 0.5),
+                    p0Bottom: CGPoint(x: rStartAnchor.x, y: rStartAnchor.y + defaultThickness)
+                )
+                
+                return BrowOverlayGeometry(
+                    redLines: redLines,
+                    purpleLines: purpleLines,
+                    physLeftShape: physLeftShape,
+                    physRightShape: physRightShape
+                )
     }
 }
 
