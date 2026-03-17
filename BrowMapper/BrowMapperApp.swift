@@ -667,10 +667,25 @@ private struct BrowGeometryBuilder {
         let leftPupilPt = mappedLeftPupil ?? mappedLeftEye.center()
         let rightPupilPt = mappedRightPupil ?? mappedRightEye.center()
         
-        // Outer eye corners (Physical Left is Screen Right, so its outer corner is max X)
+        // --- NEW: Calculate Iris Edges ---
+        
+        // Outer and Inner eye corners
         let leftOuterEyePt = mappedLeftEye.max(by: { $0.x < $1.x }) ?? .zero
-        // Outer eye corners (Physical Right is Screen Left, so its outer corner is min X)
+        let leftInnerEyePt = mappedLeftEye.min(by: { $0.x < $1.x }) ?? .zero
+        
         let rightOuterEyePt = mappedRightEye.min(by: { $0.x < $1.x }) ?? .zero
+        let rightInnerEyePt = mappedRightEye.max(by: { $0.x < $1.x }) ?? .zero
+        
+        // Iris radius is ~22% of total eye width
+        let leftEyeWidth = leftOuterEyePt.x - leftInnerEyePt.x
+        let rightEyeWidth = rightInnerEyePt.x - rightOuterEyePt.x
+        
+        // Physical left eye is screen-right, so we move +X to go outward toward the ear
+        let leftIrisOuterPt = CGPoint(x: leftPupilPt.x + (leftEyeWidth * 0.22), y: leftPupilPt.y)
+        // Physical right eye is screen-left, so we move -X to go outward toward the ear
+        let rightIrisOuterPt = CGPoint(x: rightPupilPt.x - (rightEyeWidth * 0.22), y: rightPupilPt.y)
+        
+        // ---------------------------------
         
         let leftBrowStart = mappedLeftBrow.max(by: { $0.x < $1.x }) ?? .zero
         let rightBrowStart = mappedRightBrow.min(by: { $0.x < $1.x }) ?? .zero
@@ -678,8 +693,8 @@ private struct BrowGeometryBuilder {
         let topY = (leftBrowStart.y + rightBrowStart.y) * 0.5 - 10
         let bottomY = (leftBrowStart.y + rightBrowStart.y) * 0.5 + 10
         
-        let extL = screenLeftNostril.x - 70
-        let extR = screenRightNostril.x + 70
+        let extL = screenLeftNostril.x - 90
+        let extR = screenRightNostril.x + 90
         
         // Yellow Lines (Verticals and Horizontals)
         let redLines = [
@@ -692,10 +707,10 @@ private struct BrowGeometryBuilder {
         
         let length: CGFloat = 450
         
-        // Map physical sides to physical sides to prevent crossing
-        let lArchDir = (leftPupilPt - physLeftNostril).normalized
+        // Map physical sides to physical sides, now targeting the outer iris!
+        let lArchDir = (leftIrisOuterPt - physLeftNostril).normalized
         let lTailDir = (leftOuterEyePt - physLeftNostril).normalized
-        let rArchDir = (rightPupilPt - physRightNostril).normalized
+        let rArchDir = (rightIrisOuterPt - physRightNostril).normalized
         let rTailDir = (rightOuterEyePt - physRightNostril).normalized
         
         // White Lines (Diagonals)
